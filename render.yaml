@@ -4,7 +4,7 @@ services:
     env: python
     region: oregon
     buildCommand: "./build.sh"
-    startCommand: "cd pixel_brains_django && gunicorn pixel_brains_django.wsgi:application"
+    startCommand: "gunicorn --chdir pixel_brains_django pixel_brains_django.wsgi:application"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
