@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import sys
 import os
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,17 +22,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PARENT_DIR = BASE_DIR.parent
 sys.path.insert(0, str(PARENT_DIR))
 
+# Load .env from parent directory (local dev)
+load_dotenv(dotenv_path=PARENT_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-ebn498n9riyn(z@z7%em%n8hw=4r=g6b34y4mr7sy+#%ln1*7m"
+SECRET_KEY = os.environ.get(
+    'SECRET_KEY',
+    'django-insecure-ebn498n9riyn(z@z7%em%n8hw=4r=g6b34y4mr7sy+#%ln1*7m'
+)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Run with DEBUG=False on Vercel (VERCEL env var is set automatically)
+DEBUG = not bool(os.environ.get('VERCEL', ''))
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '.vercel.app',
+    '.now.sh',
+    '*',  # widen for initial deploy; tighten after confirming domain
+]
 
 
 # Application definition
@@ -49,6 +61,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # serve static files in production
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -122,11 +135,13 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"  # where collectstatic outputs files
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Media files (uploaded images, cached satellite images)
-MEDIA_URL = "media/"
+MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # Cache directory for satellite images

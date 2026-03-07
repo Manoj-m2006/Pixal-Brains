@@ -1,20 +1,27 @@
-# Core Reflex Framework
-reflex>=0.6.0
+# Django web framework
+Django>=4.2,<5.0
+djangorestframework
+gunicorn
+whitenoise
 
-# Backend Dependencies
-sentinelhub
+# Environment & config
 python-dotenv
+
+# Satellite & image processing
+requests
 pillow
 numpy
-opencv-python
-transformers
-torch
-requests
+opencv-python-headless
+
+# AI / Gemini
 google-generativeai
+
+# OAuth (Copernicus)
 oauthlib
 requests-oauthlib
 
-# Legacy Streamlit (backup only - not used in Reflex version)
-# streamlit
-# folium
-# streamlit-folium
+# Optional: heavy ML (torch/transformers too large for Vercel ~50MB limit)
+# Install locally or use Railway/Render for full ML support
+# torch
+# transformers
+# sentinelhub

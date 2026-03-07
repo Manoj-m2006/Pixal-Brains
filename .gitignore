@@ -53,6 +53,9 @@ Thumbs.db
 # Streamlit
 .streamlit/
 
+# Static files collected by Django (generated, not source)
+pixel_brains_django/staticfiles/
+
 # Data (if any large datasets)
 data/raw/*
 !data/raw/.gitkeep
