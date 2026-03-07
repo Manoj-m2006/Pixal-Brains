@@ -1,223 +1,334 @@
-from sentinelhub import (
-    SHConfig, SentinelHubRequest, DataCollection,
-    MimeType, CRS, BBox, MosaickingOrder,
-)
-import datetime, math
-from PIL import Image
-import numpy as np
-from dotenv import load_dotenv
-import os
+"""
+Copernicus Data Space Ecosystem - Sentinel Hub Satellite API
+Fetches Sentinel-2 (optical) and Sentinel-1 (SAR) imagery using the
+Sentinel Hub Process API via OAuth2 credentials stored in .env.
 
-# Load environment variables from .env file
+Credentials required in .env:
+  COPERNICUS_CLIENT_ID=sh-xxxxxxxx-...
+  COPERNICUS_CLIENT_SECRET=...
+"""
+
+import os
+import io
+import math
+import hashlib
+import datetime
+import time as _time
+import requests
+import numpy as np
+from PIL import Image, ImageEnhance
+import cv2
+from io import BytesIO
+from dotenv import load_dotenv
+
+# -- Load env -----------------------------------------------------------------
 load_dotenv()
 
-# ── Credentials ───────────────────────────────────────────────────────────────
-# IMPORTANT: Set these as environment variables or in a .env file
-# Never commit credentials to GitHub!
+# -- Constants ----------------------------------------------------------------
+_TOKEN_URL   = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+_PROCESS_URL = "https://sh.dataspace.copernicus.eu/api/v1/process"
 
-config = SHConfig()
-config.sh_client_id     = os.getenv('SH_CLIENT_ID', 'YOUR_CLIENT_ID_HERE')
-config.sh_client_secret = os.getenv('SH_CLIENT_SECRET', 'YOUR_CLIENT_SECRET_HERE')
+# -- Cache --------------------------------------------------------------------
+CACHE_DIR = os.path.join(os.path.dirname(__file__), "data", "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
 
-# ── Evalscripts ───────────────────────────────────────────────────────────────
-_OPTICAL_EVALSCRIPT = """
+def _cache_key(bbox_coords: list, date_string: str, img_type: str) -> str:
+    rounded_bbox = [round(x, 3) for x in bbox_coords]
+    key_str = f"{rounded_bbox}_{date_string}_{img_type}"
+    return hashlib.md5(key_str.encode()).hexdigest()
+
+def _get_cached_image(cache_key: str):
+    import time
+    for ext in ["webp", "jpg", "png"]:
+        cache_path = os.path.join(CACHE_DIR, f"{cache_key}.{ext}")
+        if os.path.exists(cache_path):
+            age_days = (time.time() - os.path.getmtime(cache_path)) / 86400
+            if age_days < 90:
+                print(f"   Cache hit ({ext}, {age_days:.1f}d old)")
+                return Image.open(cache_path).copy()
+            else:
+                os.remove(cache_path)
+    return None
+
+def _save_to_cache(cache_key: str, img: Image.Image):
+    cache_path = os.path.join(CACHE_DIR, f"{cache_key}.webp")
+    img.convert("RGB").save(cache_path, "WEBP", quality=85)
+
+# -- OAuth2 token (in-process cache) -----------------------------------------
+_token_cache = {"token": None, "expires_at": 0.0}
+
+def _get_access_token() -> str:
+    import time
+    if time.time() < _token_cache["expires_at"] - 30 and _token_cache["token"]:
+        return _token_cache["token"]
+    client_id     = os.getenv("COPERNICUS_CLIENT_ID", "")
+    client_secret = os.getenv("COPERNICUS_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        raise RuntimeError("COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET not set in .env")
+    resp = requests.post(
+        _TOKEN_URL,
+        data={"grant_type": "client_credentials",
+              "client_id": client_id,
+              "client_secret": client_secret},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    js = resp.json()
+    import time as t2
+    _token_cache["token"]      = js["access_token"]
+    _token_cache["expires_at"] = t2.time() + int(js.get("expires_in", 3600))
+    print("   Copernicus token obtained")
+    return _token_cache["token"]
+
+# -- Adaptive size ------------------------------------------------------------
+def _adaptive_size(bbox_coords: list, mode: str = "standard") -> tuple:
+    minx, miny, maxx, maxy = bbox_coords
+    w_deg = maxx - minx
+    h_deg = maxy - miny
+    ar = w_deg / h_deg if h_deg > 0 else 1.0
+    base = {"fast": 512, "high": 1024}.get(mode, 768)
+    if ar > 1:
+        width, height = base, max(256, int(base / ar))
+    else:
+        width, height = max(256, int(base * ar)), base
+    return min(2500, width), min(2500, height)
+
+# -- Image enhancement --------------------------------------------------------
+def _enhance_image_quality(img: Image.Image, scale_factor: float = 1.0, mode: str = "display") -> Image.Image:
+    arr = np.array(img.convert("RGB"))
+    if mode in ("display", "analysis"):
+        arr = cv2.bilateralFilter(arr, 5, 50, 50)
+        lab = cv2.cvtColor(arr, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        arr = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2RGB)
+    if scale_factor > 1.0:
+        new_w = int(arr.shape[1] * scale_factor)
+        new_h = int(arr.shape[0] * scale_factor)
+        arr = cv2.resize(arr, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+    return Image.fromarray(arr)
+
+# -- Evalscripts --------------------------------------------------------------
+_S2_EVALSCRIPT = """
 //VERSION=3
 function setup() {
-    return {
-        input: [{ bands: ["B04","B03","B02","SCL"] }],
-        output: { bands: 3, sampleType: "AUTO" },
-        mosaicking: "ORBIT"
-    };
+  return { input: ["B04","B03","B02","dataMask"],
+           output: { bands: 4, sampleType: "UINT8" } };
 }
-function evaluatePixel(samples) {
-    // Safety: no data available
-    if (!samples || samples.length === 0) {
-        return [0, 0, 0];
-    }
-    // SCL cloud classes: 3=shadow, 8=medium, 9=high, 10=cirrus, 1=saturated, 0=no_data
-    var cloudClasses = [0, 1, 3, 8, 9, 10, 11];
-    var clearSamples = [];
-    
-    // Collect all clear samples
-    for (var i = 0; i < samples.length; i++) {
-        var s = samples[i];
-        if (s && s.B04 !== undefined && cloudClasses.indexOf(s.SCL) === -1) {
-            clearSamples.push(s);
-        }
-    }
-    
-    // If we have clear samples, use the most recent one
-    if (clearSamples.length > 0) {
-        var s = clearSamples[clearSamples.length - 1];
-        return [3.2 * s.B04, 3.2 * s.B03, 3.2 * s.B02];
-    }
-    
-    // No clear samples - use ANY available sample (even cloudy > nothing)
-    for (var i = samples.length - 1; i >= 0; i--) {
-        var s = samples[i];
-        if (s && s.B04 !== undefined) {
-            return [3.2 * s.B04, 3.2 * s.B03, 3.2 * s.B02];
-        }
-    }
-    
-    // Truly no data
-    return [0, 0, 0];
+function evaluatePixel(s) {
+  const gain = 3.5;
+  return [ Math.min(255, s.B04 * gain * 255),
+           Math.min(255, s.B03 * gain * 255),
+           Math.min(255, s.B02 * gain * 255),
+           s.dataMask ? 255 : 0 ];
 }
 """
 
-# SAR Sentinel-1 — VV backscatter, normalized to 0-255 display range
-# dB range: -25 dB (water/smooth) to 0 dB (urban/rough).  Mapped linearly to 0-255.
 _SAR_EVALSCRIPT = """
 //VERSION=3
 function setup() {
-    return {
-        input: [{ bands: ["VV"] }],
-        output: { bands: 1, sampleType: "AUTO" }
-    };
+  return { input: ["VV","VH","dataMask"],
+           output: { bands: 4, sampleType: "UINT8" } };
 }
-function evaluatePixel(sample) {
-    // Safety check
-    if (!sample || sample.VV === undefined) {
-        return [0];
-    }
-    // Convert linear → dB, scale [-30, 5] dB → [0, 1]
-    var db = 10 * Math.log(sample.VV + 1e-6) / Math.log(10);
-    var scaled = (db + 30) / 35.0;
-    return [Math.max(0, Math.min(1, scaled))];
+function evaluatePixel(s) {
+  const vv = Math.sqrt(Math.max(0, s.VV));
+  const vh = Math.sqrt(Math.max(0, s.VH));
+  const ratio = Math.min(1, vv / (vh + 1e-6));
+  return [ Math.min(255, vv * 800),
+           Math.min(255, vh * 800),
+           Math.min(255, ratio * 200),
+           s.dataMask ? 255 : 0 ];
 }
 """
 
+# -- Core fetch helpers -------------------------------------------------------
+def _sentinel2_process(bbox_coords, date_string, width, height, window_days=60, forward_only=False):
+    target    = datetime.datetime.strptime(date_string, "%Y-%m-%d")
+    if forward_only:
+        # Look FORWARD from this date so consecutive dates get different acquisitions
+        time_from = target.strftime("%Y-%m-%dT00:00:00Z")
+        time_to   = (target + datetime.timedelta(days=window_days)).strftime("%Y-%m-%dT23:59:59Z")
+    else:
+        time_from = (target - datetime.timedelta(days=window_days)).strftime("%Y-%m-%dT00:00:00Z")
+        time_to   = (target + datetime.timedelta(days=window_days)).strftime("%Y-%m-%dT23:59:59Z")
+    minx, miny, maxx, maxy = bbox_coords
+    payload = {
+        "input": {
+            "bounds": {
+                "bbox": [minx, miny, maxx, maxy],
+                "properties": {"crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"},
+            },
+            "data": [{
+                "type": "sentinel-2-l2a",
+                "dataFilter": {
+                    "timeRange": {"from": time_from, "to": time_to},
+                    "maxCloudCoverage": 80,
+                    "mosaickingOrder": "leastCC" if not forward_only else "mostRecent",
+                },
+            }],
+        },
+        "output": {
+            "width": width, "height": height,
+            "responses": [{"identifier": "default", "format": {"type": "image/png"}}],
+        },
+        "evalscript": _S2_EVALSCRIPT,
+    }
+    token   = _get_access_token()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    resp    = requests.post(_PROCESS_URL, json=payload, headers=headers, timeout=120)
+    if resp.status_code == 204:
+        raise ValueError("No Sentinel-2 imagery for this region/period (HTTP 204)")
+    resp.raise_for_status()
+    img = Image.open(BytesIO(resp.content)).convert("RGB")
+    if np.array(img).mean() < 3:
+        raise ValueError("Returned image is all-black (no data)")
+    return img
 
-def _adaptive_size(bbox_coords: list) -> tuple:
-    """Return (width_px, height_px) targeting ~15 m/pixel, capped at 1024."""
-    min_lon, min_lat, max_lon, max_lat = bbox_coords
-    clat     = (min_lat + max_lat) / 2
-    w_km     = abs(max_lon - min_lon) * 111.0 * math.cos(math.radians(clat))
-    h_km     = abs(max_lat - min_lat) * 111.0
-    px_per_km = 66   # ~15 m/pixel
-    w = int(min(1024, max(512, w_km * px_per_km)))
-    h = int(min(1024, max(512, h_km * px_per_km)))
-    return (w, h)
 
+def _sentinel1_process(bbox_coords, date_string, width, height, window_days=30):
+    target    = datetime.datetime.strptime(date_string, "%Y-%m-%d")
+    time_from = (target - datetime.timedelta(days=window_days)).strftime("%Y-%m-%dT00:00:00Z")
+    time_to   = (target + datetime.timedelta(days=window_days)).strftime("%Y-%m-%dT23:59:59Z")
+    minx, miny, maxx, maxy = bbox_coords
+    payload = {
+        "input": {
+            "bounds": {
+                "bbox": [minx, miny, maxx, maxy],
+                "properties": {"crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"},
+            },
+            "data": [{
+                "type": "sentinel-1-grd",
+                "dataFilter": {
+                    "timeRange": {"from": time_from, "to": time_to},
+                    "acquisitionMode": "IW",
+                    "polarization": "DV",
+                    "mosaickingOrder": "mostRecent",
+                },
+                "processing": {"orthorectify": True, "backCoeff": "SIGMA0_ELLIPSOID"},
+            }],
+        },
+        "output": {
+            "width": width, "height": height,
+            "responses": [{"identifier": "default", "format": {"type": "image/png"}}],
+        },
+        "evalscript": _SAR_EVALSCRIPT,
+    }
+    token   = _get_access_token()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    resp    = requests.post(_PROCESS_URL, json=payload, headers=headers, timeout=120)
+    if resp.status_code == 204:
+        return None
+    resp.raise_for_status()
+    img = Image.open(BytesIO(resp.content)).convert("RGB")
+    if np.array(img).mean() < 3:
+        return None
+    return img
 
-def _to_uint8(arr: np.ndarray) -> np.ndarray:
-    if arr.dtype in (np.float32, np.float64):
-        return (arr * 255).clip(0, 255).astype(np.uint8)
-    return arr.astype(np.uint8)
-
-
-# ── Optical Sentinel-2 ────────────────────────────────────────────────────────
-def _optical_request(bbox: BBox, date_string: str, size: tuple, window_days: int = 365):
-    """Request with a 1-year window to maximize chances of finding clear imagery."""
-    end   = datetime.datetime.strptime(date_string, "%Y-%m-%d")
-    start = end - datetime.timedelta(days=window_days)
-    return SentinelHubRequest(
-        evalscript=_OPTICAL_EVALSCRIPT,
-        input_data=[
-            SentinelHubRequest.input_data(
-                data_collection=DataCollection.SENTINEL2_L2A,
-                time_interval=(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")),
-                mosaicking_order=MosaickingOrder.LEAST_CC,
-            )
-        ],
-        responses=[SentinelHubRequest.output_response('default', MimeType.PNG)],
-        bbox=bbox, size=size, config=config,
-    )
-
-
-def fetch_satellite_image_bbox(bbox_coords: list, date_string: str) -> Image.Image:
+# -- Public API ---------------------------------------------------------------
+def fetch_satellite_image_bbox(
+    bbox_coords: list,
+    date_string: str,
+    enhance_mode: str = "display",
+    quality_mode: str = "standard",
+    forward_only: bool = False,
+) -> Image.Image:
     """
-    Cloud-masked Sentinel-2 L2A image for an explicit bbox.
-    Uses an intelligent cloud filter - prefers clear pixels but falls back to
-    any available data if the entire region is cloudy.
-    bbox_coords: [min_lon, min_lat, max_lon, max_lat]
-    Returns best available image from a 1-year window.
+    Fetch Sentinel-2 L2A optical satellite imagery for a bounding box.
+
+    Args:
+        bbox_coords:  [minx, miny, maxx, maxy] WGS-84
+        date_string:  "YYYY-MM-DD"
+        enhance_mode: "raw" | "display" | "analysis"
+        quality_mode: "fast" | "standard" | "high"
+
+    Returns:
+        PIL Image (RGB)
     """
-    print(f"📡 Optical [{date_string}] bbox={[round(x,4) for x in bbox_coords]}")
-    bbox = BBox(bbox=bbox_coords, crs=CRS.WGS84)
-    size = _adaptive_size(bbox_coords)
-    print(f"   → image size: {size[0]}×{size[1]} px")
-    
+    print(f"\n[S2] Copernicus Sentinel-2 fetch")
+    print(f"   BBox: {bbox_coords}  Date: {date_string}  mode: {enhance_mode}/{quality_mode}")
+
+    ck = _cache_key(bbox_coords, date_string, f"s2_{enhance_mode}_{quality_mode}{'_fwd' if forward_only else ''}")
+    cached = _get_cached_image(ck)
+    if cached:
+        return cached
+
+    width, height = _adaptive_size(bbox_coords, quality_mode)
+    window        = 20 if forward_only else (45 if quality_mode == "fast" else 90)
+
+    img = _sentinel2_process(bbox_coords, date_string, width, height, window_days=window, forward_only=forward_only)
+    print(f"   OK Sentinel-2 {img.size}")
+
+    if enhance_mode != "raw":
+        img = _enhance_image_quality(img, scale_factor=1.0, mode=enhance_mode)
+
+    _save_to_cache(ck, img)
+    return img
+
+
+def fetch_sar_image_bbox(
+    bbox_coords: list,
+    date_string: str,
+    quality_mode: str = "standard",
+):
+    """
+    Fetch Sentinel-1 SAR imagery.  Returns None if unavailable.
+    """
+    print(f"\n[SAR] Copernicus Sentinel-1 fetch")
+    print(f"   BBox: {bbox_coords}  Date: {date_string}")
+
+    ck = _cache_key(bbox_coords, date_string, f"sar_{quality_mode}")
+    cached = _get_cached_image(ck)
+    if cached:
+        return cached
+
+    width, height = _adaptive_size(bbox_coords, quality_mode)
     try:
-        arr = _optical_request(bbox, date_string, size).get_data()[0]
-        
-        # Check if image is all zeros (no data in this region/timeframe)
-        if arr.max() == 0:
-            print(f"⚠️  No data in 1-year window, trying 2-year window...")
-            arr = _optical_request(bbox, date_string, size, window_days=730).get_data()[0]
-            
-            if arr.max() == 0:
-                raise ValueError(
-                    f"No Sentinel-2 coverage for this location/period. "
-                    f"Try a different date or location. "
-                    f"(Sentinel-2 operational since mid-2015)"
-                )
-        
-        img = Image.fromarray(_to_uint8(arr))
-        print("✅ Optical ready")
+        img = _sentinel1_process(bbox_coords, date_string, width, height)
+        if img is None:
+            print("   No SAR data available")
+            return None
+        print(f"   OK SAR {img.size}")
+        _save_to_cache(ck, img)
         return img
-        
-    except Exception as e:
-        print(f"❌ Optical fetch failed: {e}")
-        raise
-
-
-# ── SAR Sentinel-1 (cloud-penetrating) ───────────────────────────────────────
-def fetch_sar_image_bbox(bbox_coords: list, date_string: str) -> Image.Image | None:
-    """
-    Sentinel-1 IW GRD VV backscatter — cloud-penetrating, all-weather.
-    Returns a grayscale PIL Image, or None if no data is available.
-    bbox_coords: [min_lon, min_lat, max_lon, max_lat]
-    """
-    print(f"📡 SAR   [{date_string}] bbox={[round(x,4) for x in bbox_coords]}")
-    try:
-        bbox  = BBox(bbox=bbox_coords, crs=CRS.WGS84)
-        size  = _adaptive_size(bbox_coords)
-        end   = datetime.datetime.strptime(date_string, "%Y-%m-%d")
-        start = end - datetime.timedelta(days=90)
-
-        request = SentinelHubRequest(
-            evalscript=_SAR_EVALSCRIPT,
-            input_data=[
-                SentinelHubRequest.input_data(
-                    data_collection=DataCollection.SENTINEL1_IW,
-                    time_interval=(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")),
-                    mosaicking_order=MosaickingOrder.MOST_RECENT,
-                )
-            ],
-            responses=[SentinelHubRequest.output_response('default', MimeType.PNG)],
-            bbox=bbox, size=size, config=config,
-        )
-        arr = request.get_data()[0]
-        # SAR returns single band — squeeze to 2D
-        if arr.ndim == 3 and arr.shape[2] == 1:
-            arr = arr[:, :, 0]
-        img = Image.fromarray(_to_uint8(arr), mode='L')
-        print("✅ SAR ready")
-        return img
-    except Exception as e:
-        print(f"⚠️  SAR unavailable ({e}) — proceeding optical-only")
+    except Exception as exc:
+        print(f"   SAR fetch failed: {exc}")
         return None
 
 
-# ── Legacy point-based helper (kept for backward compat) ─────────────────────
 def fetch_satellite_image(lat: float, lon: float, date_string: str, zoom: float = 0.15) -> Image.Image:
-    coords = [lon - zoom, lat - zoom, lon + zoom, lat + zoom]
-    return fetch_satellite_image_bbox(coords, date_string)
+    """Convenience: fetch image for a point location."""
+    bbox = [lon - zoom/2, lat - zoom/2, lon + zoom/2, lat + zoom/2]
+    return fetch_satellite_image_bbox(bbox, date_string, "display", "standard")
 
 
-# ── Smoke test ────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    test_bbox = [77.53, 12.93, 77.63, 13.01]   # Bengaluru central
-    test_date = "2023-01-15"  # Known good date
-    print("🚀 Smoke test …")
+# -- Startup check ------------------------------------------------------------
+print("=" * 70)
+print("COPERNICUS DATA SPACE ECOSYSTEM - SENTINEL HUB SATELLITE API")
+
+_cid = os.getenv("COPERNICUS_CLIENT_ID", "")
+_cs  = os.getenv("COPERNICUS_CLIENT_SECRET", "")
+
+if _cid and _cs:
     try:
-        opt = fetch_satellite_image_bbox(test_bbox, test_date)
-        opt.save("test_optical.png")
-        print("✅ Optical → test_optical.png")
-        sar = fetch_sar_image_bbox(test_bbox, test_date)
-        if sar:
-            sar.save("test_sar.png")
-            print("✅ SAR → test_sar.png")
-    except Exception as e:
-        print(f"❌ {e}")
+        _get_access_token()
+        print(f"   OK  Authenticated  client={_cid[:24]}...")
+        print("   Sentinel-2 optical + Sentinel-1 SAR ready")
+    except Exception as _e:
+        print(f"   WARNING  Token fetch failed: {_e}")
+        print("   Check COPERNICUS_CLIENT_ID / COPERNICUS_CLIENT_SECRET in .env")
+else:
+    print("   WARNING  No Copernicus credentials found in .env")
+    print("   Set COPERNICUS_CLIENT_ID and COPERNICUS_CLIENT_SECRET")
+
+print("=" * 70)
+
+
+if __name__ == "__main__":
+    print("\nTEST: Sentinel-2 optical")
+    try:
+        img = fetch_satellite_image_bbox([77.1, 28.5, 77.3, 28.7], "2024-06-01", "display", "fast")
+        img.save("test_s2_copernicus.png")
+        print(f"Saved test_s2_copernicus.png {img.size}")
+    except Exception as ex:
+        print(f"FAIL {ex}")

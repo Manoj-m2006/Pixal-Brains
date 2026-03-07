@@ -1,0 +1,190 @@
+{
+  "floods": [
+    {
+      "id": "flood_pakistan_2022",
+      "name": "Pakistan Floods",
+      "year": 2022,
+      "location": "Sindh Province, Pakistan",
+      "lat": 27.7,
+      "lon": 68.3,
+      "start_date": "2022-08-15",
+      "end_date": "2022-09-15",
+      "description": "Devastating monsoon floods affecting millions"
+    },
+    {
+      "id": "flood_kerala_2018",
+      "name": "Kerala Floods",
+      "year": 2018,
+      "location": "Kerala, India",
+      "lat": 10.8505,
+      "lon": 76.2711,
+      "start_date": "2018-08-08",
+      "end_date": "2018-08-27",
+      "description": "Worst floods in Kerala in nearly a century"
+    },
+    {
+      "id": "flood_assam_2020",
+      "name": "Assam Floods",
+      "year": 2020,
+      "location": "Assam, India",
+      "lat": 26.2006,
+      "lon": 92.9376,
+      "start_date": "2020-07-10",
+      "end_date": "2020-07-30",
+      "description": "Annual monsoon flooding affecting Northeast India"
+    }
+  ],
+  "fires": [
+    {
+      "id": "fire_australia_2020",
+      "name": "Australian Bushfires",
+      "year": 2020,
+      "location": "New South Wales, Australia",
+      "lat": -33.5,
+      "lon": 150.5,
+      "start_date": "2019-12-15",
+      "end_date": "2020-02-15",
+      "description": "Catastrophic bushfire season"
+    },
+    {
+      "id": "fire_amazon_2019",
+      "name": "Amazon Rainforest Fires",
+      "year": 2019,
+      "location": "Amazon Basin, Brazil",
+      "lat": -3.4653,
+      "lon": -62.2159,
+      "start_date": "2019-08-01",
+      "end_date": "2019-09-30",
+      "description": "Record-breaking fires in the Amazon"
+    },
+    {
+      "id": "fire_california_2020",
+      "name": "California Wildfires",
+      "year": 2020,
+      "location": "California, USA",
+      "lat": 37.5,
+      "lon": -120.5,
+      "start_date": "2020-08-15",
+      "end_date": "2020-10-15",
+      "description": "Record wildfire season in California"
+    }
+  ],
+  "earthquakes": [
+    {
+      "id": "quake_turkey_2023",
+      "name": "Turkey-Syria Earthquake",
+      "year": 2023,
+      "location": "Kahramanmaraş, Turkey",
+      "lat": 37.226,
+      "lon": 37.021,
+      "start_date": "2023-02-06",
+      "end_date": "2023-02-20",
+      "description": "7.8 magnitude earthquake causing massive destruction"
+    },
+    {
+      "id": "quake_nepal_2015",
+      "name": "Nepal Earthquake",
+      "year": 2015,
+      "location": "Kathmandu, Nepal",
+      "lat": 27.7172,
+      "lon": 85.324,
+      "start_date": "2015-04-25",
+      "end_date": "2015-05-10",
+      "description": "7.8 magnitude earthquake devastating Nepal"
+    },
+    {
+      "id": "quake_haiti_2021",
+      "name": "Haiti Earthquake",
+      "year": 2021,
+      "location": "Nippes, Haiti",
+      "lat": 18.435,
+      "lon": -73.481,
+      "start_date": "2021-08-14",
+      "end_date": "2021-08-28",
+      "description": "7.2 magnitude earthquake"
+    }
+  ],
+  "hurricanes": [
+    {
+      "id": "hurricane_ian_2022",
+      "name": "Hurricane Ian",
+      "year": 2022,
+      "location": "Florida, USA",
+      "lat": 26.6406,
+      "lon": -81.8723,
+      "start_date": "2022-09-24",
+      "end_date": "2022-10-02",
+      "description": "Category 4 hurricane hitting Florida"
+    },
+    {
+      "id": "cyclone_amphan_2020",
+      "name": "Cyclone Amphan",
+      "year": 2020,
+      "location": "West Bengal, India",
+      "lat": 22.5726,
+      "lon": 88.3639,
+      "start_date": "2020-05-16",
+      "end_date": "2020-05-21",
+      "description": "Super cyclonic storm in Bay of Bengal"
+    },
+    {
+      "id": "typhoon_haiyan_2013",
+      "name": "Typhoon Haiyan",
+      "year": 2013,
+      "location": "Tacloban, Philippines",
+      "lat": 11.2447,
+      "lon": 125.0038,
+      "start_date": "2013-11-08",
+      "end_date": "2013-11-15",
+      "description": "One of the strongest tropical cyclones ever recorded"
+    }
+  ],
+  "landslides": [
+    {
+      "id": "landslide_kerala_2019",
+      "name": "Kerala Landslides",
+      "year": 2019,
+      "location": "Wayanad, Kerala",
+      "lat": 11.605,
+      "lon": 76.084,
+      "start_date": "2019-08-08",
+      "end_date": "2019-08-15",
+      "description": "Monsoon-triggered landslides"
+    },
+    {
+      "id": "landslide_uttarakhand_2021",
+      "name": "Uttarakhand Landslide",
+      "year": 2021,
+      "location": "Uttarakhand, India",
+      "lat": 30.0668,
+      "lon": 79.0193,
+      "start_date": "2021-02-07",
+      "end_date": "2021-02-14",
+      "description": "Glacier burst causing landslides"
+    }
+  ],
+  "droughts": [
+    {
+      "id": "drought_africa_2022",
+      "name": "Horn of Africa Drought",
+      "year": 2022,
+      "location": "Somalia",
+      "lat": 5.152,
+      "lon": 46.199,
+      "start_date": "2022-01-01",
+      "end_date": "2022-12-31",
+      "description": "Severe multi-year drought"
+    },
+    {
+      "id": "drought_california_2021",
+      "name": "California Drought",
+      "year": 2021,
+      "location": "California, USA",
+      "lat": 36.7783,
+      "lon": -119.4179,
+      "start_date": "2021-03-01",
+      "end_date": "2021-11-30",
+      "description": "Extreme drought conditions"
+    }
+  ]
+}

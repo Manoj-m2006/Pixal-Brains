@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Satellite Change Detection{% endblock %}</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Back to Solar System Button (only on child pages) -->
+    {% if active_tab != 'home' %}
+    <a href="/?return=true" class="back-to-home-btn">
+        <i class="fas fa-arrow-left"></i>
+        <span>BACK TO EARTH</span>
+    </a>
+    {% endif %}
+    
+    {% if active_tab != 'home' %}
+    <!-- Other pages wrapped in app-container -->
+    <div class="app-container">
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <a href="{% url 'index' %}" class="nav-tab {% if active_tab == 'home' %}active{% endif %}">
+                <i class="fas fa-home"></i> Home
+            </a>
+            <a href="{% url 'change_detection' %}" class="nav-tab {% if active_tab == 'change_detection' %}active{% endif %}">
+                <i class="fas fa-exchange-alt"></i> Change Detection
+            </a>
+            <a href="{% url 'time_series' %}" class="nav-tab {% if active_tab == 'time_series' %}active{% endif %}">
+                <i class="fas fa-chart-line"></i> Time Series Analysis
+            </a>
+            <a href="{% url 'disasters' %}" class="nav-tab {% if active_tab == 'disasters' %}active{% endif %}">
+                <i class="fas fa-exclamation-triangle"></i> Disasters
+            </a>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+    {% endif %}
+    
+            {% block content %}{% endblock %}
+    
+    {% if active_tab != 'home' %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>© 2026 VYOM NETRA | Satellite imagery from Copernicus Data Space Ecosystem</p>
+        </footer>
+    </div>
+    {% endif %}
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <i class="fas fa-satellite fa-spin"></i>
+            <p id="loading-text">Processing...</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    {% load static %}
+    <script src="{% static 'js/main.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+    {% if active_tab != 'home' %}
+    <script>
+    (function() {
+        const btn = document.querySelector('.back-to-home-btn');
+        if (!btn) return;
+        window.addEventListener('scroll', function() {
+            // Fade from fully visible at top to 15% opacity after 200px scroll
+            const scrollY = window.scrollY || window.pageYOffset;
+            const opacity = Math.max(0.15, 1 - (scrollY / 200));
+            btn.style.opacity = opacity;
+        }, { passive: true });
+    })();
+    </script>
+    {% endif %}
+</body>
+</html>

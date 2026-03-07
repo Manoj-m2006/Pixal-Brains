@@ -1,0 +1,692 @@
+{% extends 'base.html' %}
+{% block title %}Change Detection - Satellite Analysis{% endblock %}
+
+{% block content %}
+<div class="detection-container">
+    <div class="page-header">
+        <h2><i class="fas fa-exchange-alt"></i> Change Detection Analysis</h2>
+        <p>Draw a rectangle on the map to select the area for analysis</p>
+    </div>
+
+    <div class="controls-section">
+        <div class="control-row">
+            <div class="control-group">
+                <label><i class="fas fa-calendar"></i> Start Date</label>
+                <input type="date" id="start-date" class="date-input">
+            </div>
+            <div class="control-group">
+                <label><i class="fas fa-calendar-check"></i> End Date</label>
+                <input type="date" id="end-date" class="date-input">
+            </div>
+            <div class="control-group location-display">
+                <label><i class="fas fa-vector-square"></i> Selected Area</label>
+                <span id="location-text">Draw rectangle on map</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-section">
+        <div class="map-toolbar">
+            <button id="draw-btn" class="tool-btn active" title="Draw Rectangle">
+                <i class="fas fa-vector-square"></i> Draw Area
+            </button>
+            <button id="clear-btn" class="tool-btn" title="Clear Selection">
+                <i class="fas fa-trash"></i> Clear
+            </button>
+        </div>
+        <div id="selection-map" class="leaflet-map"></div>
+    </div>
+
+    <div class="action-section">
+        <button id="analyze-btn" class="primary-btn" disabled>
+            <i class="fas fa-satellite"></i> Run Change Detection
+        </button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results-section" class="results-section" style="display: none;">
+        <h3><i class="fas fa-images"></i> Change Detection Results</h3>
+        
+        <div class="stats-display" id="stats-display" style="display: none;">
+            <div class="stat-box">
+                <span class="stat-value" id="pct-changed">0%</span>
+                <span class="stat-name">Changed</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="changed-km2">0</span>
+                <span class="stat-name">km² affected</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-value" id="total-km2">0</span>
+                <span class="stat-name">km² total</span>
+            </div>
+        </div>
+
+        <!-- Land Cover Analysis Panel -->
+        <div id="land-cover-panel" class="land-cover-panel" style="display:none;">
+            <div class="lc-header">// LAND COVER ANALYSIS</div>
+
+            <!-- Vegetation row -->
+            <div class="lc-row">
+                <div class="lc-label-cell">
+                    <span class="lc-icon">&#127807;</span> VEGETATION
+                    <div class="lc-subtext">FOREST / CROPS</div>
+                </div>
+                <div class="lc-bars-cell">
+                    <div class="lc-bar-group">
+                        <span class="lc-year-tag">BEFORE</span>
+                        <div class="lc-track"><div class="lc-fill veg" id="lc-veg-before-bar" style="width:0%"></div></div>
+                        <span class="lc-pct-val" id="lc-veg-before-val">--%</span>
+                    </div>
+                    <div class="lc-bar-group">
+                        <span class="lc-year-tag">AFTER</span>
+                        <div class="lc-track"><div class="lc-fill veg" id="lc-veg-after-bar" style="width:0%"></div></div>
+                        <span class="lc-pct-val" id="lc-veg-after-val">--%</span>
+                    </div>
+                </div>
+                <div class="lc-delta-cell" id="lc-veg-delta"></div>
+            </div>
+
+            <!-- Urban row -->
+            <div class="lc-row">
+                <div class="lc-label-cell">
+                    <span class="lc-icon">&#127961;</span> URBAN / BUILT
+                    <div class="lc-subtext">BUILDINGS / ROADS</div>
+                </div>
+                <div class="lc-bars-cell">
+                    <div class="lc-bar-group">
+                        <span class="lc-year-tag">BEFORE</span>
+                        <div class="lc-track"><div class="lc-fill urban" id="lc-urban-before-bar" style="width:0%"></div></div>
+                        <span class="lc-pct-val" id="lc-urban-before-val">--%</span>
+                    </div>
+                    <div class="lc-bar-group">
+                        <span class="lc-year-tag">AFTER</span>
+                        <div class="lc-track"><div class="lc-fill urban" id="lc-urban-after-bar" style="width:0%"></div></div>
+                        <span class="lc-pct-val" id="lc-urban-after-val">--%</span>
+                    </div>
+                </div>
+                <div class="lc-delta-cell" id="lc-urban-delta"></div>
+            </div>
+
+            <!-- Water row -->
+            <div class="lc-row">
+                <div class="lc-label-cell">
+                    <span class="lc-icon">&#128167;</span> WATER BODIES
+                    <div class="lc-subtext">RIVERS / LAKES</div>
+                </div>
+                <div class="lc-bars-cell">
+                    <div class="lc-bar-group">
+                        <span class="lc-year-tag">BEFORE</span>
+                        <div class="lc-track"><div class="lc-fill water" id="lc-water-before-bar" style="width:0%"></div></div>
+                        <span class="lc-pct-val" id="lc-water-before-val">--%</span>
+                    </div>
+                    <div class="lc-bar-group">
+                        <span class="lc-year-tag">AFTER</span>
+                        <div class="lc-track"><div class="lc-fill water" id="lc-water-after-bar" style="width:0%"></div></div>
+                        <span class="lc-pct-val" id="lc-water-after-val">--%</span>
+                    </div>
+                </div>
+                <div class="lc-delta-cell" id="lc-water-delta"></div>
+            </div>
+
+            <!-- Summary chips -->
+            <div class="lc-summary-row" id="lc-summary-row"></div>
+        </div>
+
+        <div class="images-comparison">
+            <div class="image-card">
+                <h4>Before Image</h4>
+                <img id="before-image" src="" alt="Before Image">
+                <p id="before-date" class="image-date"></p>
+            </div>
+            <div class="image-card">
+                <h4>After Image</h4>
+                <img id="after-image" src="" alt="After Image">
+                <p id="after-date" class="image-date"></p>
+            </div>
+            <div class="image-card">
+                <h4>Change Overlay</h4>
+                <img id="overlay-image" src="" alt="Change Overlay">
+                <p class="image-date">Red = Changed areas</p>
+            </div>
+        </div>
+
+        <div class="action-section">
+            <button id="ai-btn" class="secondary-btn" style="display: none;">
+                <i class="fas fa-brain"></i> Get AI Analysis
+            </button>
+        </div>
+
+        <div id="analysis-section" class="analysis-section" style="display: none;">
+            <h3><i class="fas fa-robot"></i> AI Analysis Results</h3>
+            <div id="analysis-content" class="analysis-content"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stats-display {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin-bottom: 25px;
+}
+.stat-box {
+    background: var(--bg-secondary);
+    padding: 15px 30px;
+    border-radius: 10px;
+    text-align: center;
+    border: 1px solid var(--accent-blue);
+}
+.stat-value {
+    display: block;
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: var(--accent-blue);
+}
+.stat-name {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+.map-toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.tool-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--accent-blue);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+.tool-btn:hover {
+    background: var(--accent-blue);
+    color: white;
+}
+.tool-btn.active {
+    background: var(--accent-blue);
+    color: white;
+}
+.tool-btn i {
+    margin-right: 5px;
+}
+
+/* ── Land Cover Analysis Panel ─────────────────────────── */
+.land-cover-panel {
+    background: #050505;
+    border: 1px solid #1c1c1c;
+    border-radius: 10px;
+    padding: 22px 26px;
+    margin: 16px 0 24px;
+    font-family: 'Courier New', monospace;
+}
+.lc-header {
+    color: #00d9ff;
+    font-size: 0.82rem;
+    letter-spacing: 2.5px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #1c1c1c;
+}
+.lc-row {
+    display: grid;
+    grid-template-columns: 145px 1fr 110px;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+.lc-label-cell {
+    color: #777;
+    font-size: 0.72rem;
+    letter-spacing: 1.5px;
+    line-height: 1.6;
+}
+.lc-icon { margin-right: 4px; }
+.lc-subtext {
+    color: #3a3a3a;
+    font-size: 0.62rem;
+    letter-spacing: 1px;
+    margin-top: 2px;
+}
+.lc-bars-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+.lc-bar-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.lc-year-tag {
+    color: #444;
+    font-size: 0.62rem;
+    width: 42px;
+    flex-shrink: 0;
+    letter-spacing: 0.8px;
+}
+.lc-track {
+    flex: 1;
+    height: 7px;
+    background: #111;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.lc-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    width: 0%;
+}
+.lc-fill.veg   { background: linear-gradient(90deg, #0d4a1e, #00ff88); }
+.lc-fill.urban { background: linear-gradient(90deg, #2a2a2a, #aaaaaa); }
+.lc-fill.water { background: linear-gradient(90deg, #001a40, #00aaff); }
+.lc-pct-val {
+    color: #999;
+    font-size: 0.72rem;
+    width: 36px;
+    text-align: right;
+    flex-shrink: 0;
+}
+.lc-delta-cell { text-align: right; }
+.lc-delta-badge {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.68rem;
+    font-weight: bold;
+    letter-spacing: 0.4px;
+    line-height: 1.5;
+    text-align: center;
+    white-space: nowrap;
+}
+.lc-delta-badge.loss-veg   { background: rgba(255,68,68,0.10); color: #ff5555; border: 1px solid rgba(255,68,68,0.35); }
+.lc-delta-badge.gain-veg   { background: rgba(0,255,136,0.10); color: #00ff88; border: 1px solid rgba(0,255,136,0.35); }
+.lc-delta-badge.gain-urban { background: rgba(255,165,0,0.10); color: #ffa500; border: 1px solid rgba(255,165,0,0.35); }
+.lc-delta-badge.loss-urban { background: rgba(0,217,255,0.10); color: #00d9ff; border: 1px solid rgba(0,217,255,0.35); }
+.lc-delta-badge.neutral    { background: rgba(80,80,80,0.10);  color: #555;    border: 1px solid rgba(80,80,80,0.3); }
+.lc-summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+    padding-top: 15px;
+    border-top: 1px solid #151515;
+}
+.lc-summary-chip {
+    padding: 5px 13px;
+    border-radius: 5px;
+    font-size: 0.68rem;
+    letter-spacing: 0.5px;
+    font-family: 'Courier New', monospace;
+}
+.lc-summary-chip.defor  { background: rgba(255,68,68,0.07); border: 1px solid rgba(255,68,68,0.28); color: #ff6666; }
+.lc-summary-chip.refor  { background: rgba(0,255,136,0.07); border: 1px solid rgba(0,255,136,0.28); color: #00ff88; }
+.lc-summary-chip.urban  { background: rgba(255,165,0,0.07); border: 1px solid rgba(255,165,0,0.28); color: #ffa500; }
+.lc-summary-chip.stable { background: rgba(80,80,80,0.07);  border: 1px solid rgba(80,80,80,0.28);  color: #666; }
+@media (max-width: 640px) {
+    .lc-row { grid-template-columns: 100px 1fr 85px; gap: 8px; }
+    .lc-label-cell { font-size: 0.65rem; }
+}
+</style>
+
+{% verbatim %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize map
+    const map = L.map('selection-map').setView([20.5937, 78.9629], 5);
+    
+    // Add satellite layer
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
+    }).addTo(map);
+    
+    // Add labels layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+        pane: 'shadowPane'
+    }).addTo(map);
+
+    let selectedBbox = null;
+    let drawnRect = null;
+    let locationName = '';
+    let isDrawing = false;
+    let startPoint = null;
+    let tempRect = null;
+    
+    // Store image data for AI analysis
+    let beforeImgB64 = null;
+    let afterImgB64 = null;
+    let statsData = null;
+
+    // Set default dates (30 days apart)
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    document.getElementById('end-date').value = today.toISOString().split('T')[0];
+    document.getElementById('start-date').value = thirtyDaysAgo.toISOString().split('T')[0];
+
+    // Rectangle drawing style
+    const rectStyle = {
+        color: '#00aaff',
+        weight: 2,
+        fillColor: '#00aaff',
+        fillOpacity: 0.2
+    };
+
+    // Enable drawing mode
+    function enableDrawing() {
+        isDrawing = true;
+        map.getContainer().style.cursor = 'crosshair';
+        document.getElementById('draw-btn').classList.add('active');
+    }
+
+    // Disable drawing mode
+    function disableDrawing() {
+        isDrawing = false;
+        map.getContainer().style.cursor = '';
+        startPoint = null;
+        if (tempRect) {
+            map.removeLayer(tempRect);
+            tempRect = null;
+        }
+    }
+
+    // Clear selection
+    function clearSelection() {
+        if (drawnRect) {
+            map.removeLayer(drawnRect);
+            drawnRect = null;
+        }
+        selectedBbox = null;
+        locationName = '';
+        document.getElementById('location-text').textContent = 'Draw rectangle on map';
+        document.getElementById('analyze-btn').disabled = true;
+        enableDrawing();
+    }
+
+    // Draw button click
+    document.getElementById('draw-btn').addEventListener('click', function() {
+        enableDrawing();
+    });
+
+    // Clear button click
+    document.getElementById('clear-btn').addEventListener('click', clearSelection);
+
+    // Mouse down - start drawing
+    map.on('mousedown', function(e) {
+        if (!isDrawing) return;
+        startPoint = e.latlng;
+    });
+
+    // Mouse move - update rectangle
+    map.on('mousemove', function(e) {
+        if (!isDrawing || !startPoint) return;
+        
+        const bounds = L.latLngBounds(startPoint, e.latlng);
+        
+        if (tempRect) {
+            tempRect.setBounds(bounds);
+        } else {
+            tempRect = L.rectangle(bounds, {...rectStyle, dashArray: '5, 5'}).addTo(map);
+        }
+    });
+
+    // Mouse up - finish drawing
+    map.on('mouseup', function(e) {
+        if (!isDrawing || !startPoint) return;
+        
+        const bounds = L.latLngBounds(startPoint, e.latlng);
+        
+        // Minimum size check
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        const latDiff = Math.abs(ne.lat - sw.lat);
+        const lngDiff = Math.abs(ne.lng - sw.lng);
+        
+        if (latDiff < 0.001 || lngDiff < 0.001) {
+            // Too small, treat as click - create default bbox
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
+            const buffer = 0.05;
+            selectedBbox = [lon - buffer, lat - buffer, lon + buffer, lat + buffer];
+        } else {
+            // Valid rectangle
+            selectedBbox = [sw.lng, sw.lat, ne.lng, ne.lat];
+        }
+        
+        // Clear temp rect
+        if (tempRect) {
+            map.removeLayer(tempRect);
+            tempRect = null;
+        }
+        
+        // Clear previous rect
+        if (drawnRect) {
+            map.removeLayer(drawnRect);
+        }
+        
+        // Draw final rectangle
+        drawnRect = L.rectangle(bounds, rectStyle).addTo(map);
+        
+        // Calculate area
+        const areaKm2 = calculateArea(selectedBbox);
+        
+        // Reverse geocode center
+        const centerLat = (selectedBbox[1] + selectedBbox[3]) / 2;
+        const centerLon = (selectedBbox[0] + selectedBbox[2]) / 2;
+        
+        fetch('/api/reverse-geocode/?lat=' + centerLat + '&lon=' + centerLon)
+            .then(res => res.json())
+            .then(data => {
+                locationName = data.location || (centerLat.toFixed(4) + ', ' + centerLon.toFixed(4));
+                document.getElementById('location-text').textContent = locationName + ' (~' + areaKm2 + ' km²)';
+            });
+
+        document.getElementById('analyze-btn').disabled = false;
+        disableDrawing();
+    });
+
+    // Calculate area in km²
+    function calculateArea(bbox) {
+        const [minLon, minLat, maxLon, maxLat] = bbox;
+        const centerLat = (minLat + maxLat) / 2;
+        const h = Math.abs(maxLat - minLat) * 111.0;
+        const w = Math.abs(maxLon - minLon) * 111.0 * Math.cos(centerLat * Math.PI / 180);
+        return (h * w).toFixed(1);
+    }
+
+    // Enable drawing on load
+    enableDrawing();
+
+    // Run change detection
+    document.getElementById('analyze-btn').addEventListener('click', function() {
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+
+        if (!selectedBbox) {
+            alert('Please draw a rectangle on the map');
+            return;
+        }
+
+        showLoading('Running change detection analysis...');
+
+        fetch('/api/run-detection/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                bbox: selectedBbox,
+                start_date: startDate,
+                end_date: endDate
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                // Store base64 data for AI analysis
+                beforeImgB64 = data.before_img;
+                afterImgB64 = data.after_img;
+                statsData = data.stats;
+                
+                // Display images
+                document.getElementById('before-image').src = 'data:image/png;base64,' + data.before_img;
+                document.getElementById('after-image').src = 'data:image/png;base64,' + data.after_img;
+                document.getElementById('overlay-image').src = 'data:image/png;base64,' + data.overlay_img;
+                
+                document.getElementById('before-date').textContent = startDate;
+                document.getElementById('after-date').textContent = endDate;
+                
+                // Display stats
+                if (data.stats) {
+                    document.getElementById('pct-changed').textContent = data.stats.pct_changed + '%';
+                    document.getElementById('changed-km2').textContent = data.stats.changed_km2;
+                    document.getElementById('total-km2').textContent = data.stats.total_km2;
+                    document.getElementById('stats-display').style.display = 'flex';
+                }
+
+                // Land cover analysis
+                if (data.land_cover) {
+                    renderLandCover(data.land_cover);
+                }
+
+                document.getElementById('results-section').style.display = 'block';
+                document.getElementById('ai-btn').style.display = 'inline-flex';
+            } else {
+                alert('Error: ' + (data.error || 'Change detection failed'));
+            }
+        })
+        .catch(err => {
+            hideLoading();
+            alert('Error: ' + err);
+        });
+    });
+
+    // AI Analysis
+    document.getElementById('ai-btn').addEventListener('click', function() {
+        if (!beforeImgB64 || !afterImgB64) {
+            alert('Please run change detection first');
+            return;
+        }
+
+        showLoading('Running AI analysis...');
+
+        fetch('/api/gemini-analysis/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                before_img: beforeImgB64,
+                after_img: afterImgB64,
+                location: locationName,
+                start_year: document.getElementById('start-date').value.split('-')[0],
+                end_year: document.getElementById('end-date').value.split('-')[0],
+                pct_changed: statsData ? statsData.pct_changed : 0,
+                changed_km2: statsData ? statsData.changed_km2 : 0,
+                total_km2: statsData ? statsData.total_km2 : 0
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                document.getElementById('analysis-content').innerHTML = formatAnalysis(data.analysis);
+                document.getElementById('analysis-section').style.display = 'block';
+            } else {
+                alert('AI Analysis Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            hideLoading();
+            alert('Error: ' + err);
+        });
+    });
+
+    function formatAnalysis(text) {
+        if (!text) return '';
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>');
+    }
+
+    // ── Land Cover renderer ─────────────────────────────────────
+    function renderLandCover(lc) {
+        document.getElementById('land-cover-panel').style.display = 'block';
+        const b = lc.before;
+        const a = lc.after;
+
+        function setBar(barId, valId, pct) {
+            // Animate after a short delay so CSS transition kicks in
+            setTimeout(() => {
+                document.getElementById(barId).style.width = Math.min(pct, 100) + '%';
+            }, 150);
+            document.getElementById(valId).textContent = pct.toFixed(1) + '%';
+        }
+
+        setBar('lc-veg-before-bar',   'lc-veg-before-val',   b.vegetation_pct);
+        setBar('lc-veg-after-bar',    'lc-veg-after-val',    a.vegetation_pct);
+        setBar('lc-urban-before-bar', 'lc-urban-before-val', b.urban_pct);
+        setBar('lc-urban-after-bar',  'lc-urban-after-val',  a.urban_pct);
+        setBar('lc-water-before-bar', 'lc-water-before-val', b.water_pct);
+        setBar('lc-water-after-bar',  'lc-water-after-val',  a.water_pct);
+
+        // Vegetation delta badge
+        const vegDelta = a.vegetation_pct - b.vegetation_pct;
+        const vegEl = document.getElementById('lc-veg-delta');
+        if (Math.abs(vegDelta) < 0.5) {
+            vegEl.innerHTML = '<span class="lc-delta-badge neutral">STABLE</span>';
+        } else if (vegDelta < 0) {
+            vegEl.innerHTML = '<span class="lc-delta-badge loss-veg">&#9660; ' + Math.abs(vegDelta).toFixed(1) + '%<br><small>DEFORESTED</small></span>';
+        } else {
+            vegEl.innerHTML = '<span class="lc-delta-badge gain-veg">&#9650; ' + vegDelta.toFixed(1) + '%<br><small>REFORESTED</small></span>';
+        }
+
+        // Urban delta badge
+        const urbanDelta = a.urban_pct - b.urban_pct;
+        const urbanEl = document.getElementById('lc-urban-delta');
+        if (Math.abs(urbanDelta) < 0.5) {
+            urbanEl.innerHTML = '<span class="lc-delta-badge neutral">STABLE</span>';
+        } else if (urbanDelta > 0) {
+            urbanEl.innerHTML = '<span class="lc-delta-badge gain-urban">&#9650; ' + urbanDelta.toFixed(1) + '%<br><small>URBANIZED</small></span>';
+        } else {
+            urbanEl.innerHTML = '<span class="lc-delta-badge loss-urban">&#9660; ' + Math.abs(urbanDelta).toFixed(1) + '%<br><small>REDUCED</small></span>';
+        }
+
+        // Water delta badge
+        const waterDelta = a.water_pct - b.water_pct;
+        const waterEl = document.getElementById('lc-water-delta');
+        if (Math.abs(waterDelta) < 0.5) {
+            waterEl.innerHTML = '<span class="lc-delta-badge neutral">STABLE</span>';
+        } else if (waterDelta > 0) {
+            waterEl.innerHTML = '<span class="lc-delta-badge gain-veg">&#9650; ' + waterDelta.toFixed(1) + '%</span>';
+        } else {
+            waterEl.innerHTML = '<span class="lc-delta-badge loss-veg">&#9660; ' + Math.abs(waterDelta).toFixed(1) + '%</span>';
+        }
+
+        // Summary chips
+        const summaryEl = document.getElementById('lc-summary-row');
+        let chips = '';
+        if (lc.deforestation > 1.0) {
+            chips += '<span class="lc-summary-chip defor">&#127794; ' + lc.deforestation + '% DEFORESTED</span>';
+        }
+        if (lc.reforestation > 1.0) {
+            chips += '<span class="lc-summary-chip refor">&#127807; ' + lc.reforestation + '% REFORESTED</span>';
+        }
+        if (lc.urbanization > 1.0) {
+            chips += '<span class="lc-summary-chip urban">&#127959; ' + lc.urbanization + '% NEW URBANIZATION</span>';
+        }
+        if (!chips) {
+            chips = '<span class="lc-summary-chip stable">NO SIGNIFICANT LAND COVER CHANGE DETECTED</span>';
+        }
+        summaryEl.innerHTML = chips;
+    }
+});
+</script>
+{% endverbatim %}
+{% endblock %}

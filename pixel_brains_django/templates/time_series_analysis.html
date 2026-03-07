@@ -1,0 +1,456 @@
+{% extends 'base.html' %}
+{% block title %}Time Series Analysis - Historical Changes{% endblock %}
+
+{% block content %}
+<div class="detection-container">
+    <div class="page-header">
+        <h2><i class="fas fa-chart-line"></i> Time Series Analysis</h2>
+        <p>Visualize how a location has changed over time with multiple satellite images</p>
+    </div>
+
+    <div class="controls-section">
+        <div class="control-row">
+            <div class="control-group">
+                <label><i class="fas fa-calendar"></i> Start Year</label>
+                <select id="start-year" class="select-input">
+                    {% for year in years %}
+                    <option value="{{ year }}" {% if forloop.first %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="control-group">
+                <label><i class="fas fa-calendar-check"></i> End Year</label>
+                <select id="end-year" class="select-input">
+                    {% for year in years %}
+                    <option value="{{ year }}" {% if forloop.last %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="control-group location-display">
+                <label><i class="fas fa-vector-square"></i> Area Selected</label>
+                <span id="location-text">Draw rectangle on map</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-toolbar">
+        <button id="draw-btn" class="tool-btn active">
+            <i class="fas fa-draw-polygon"></i> Draw Area
+        </button>
+        <button id="clear-btn" class="tool-btn">
+            <i class="fas fa-trash"></i> Clear
+        </button>
+        <span id="area-size" style="margin-left: 15px; color: var(--text-secondary);"></span>
+    </div>
+
+    <div class="map-section">
+        <div id="timeseries-map" class="leaflet-map"></div>
+    </div>
+
+    <div class="action-section">
+        <button id="analyze-btn" class="primary-btn" disabled>
+            <i class="fas fa-chart-line"></i> Generate Time Series
+        </button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results-section" class="results-section" style="display: none;">
+        <h3 style="font-family:'Courier New',monospace;color:#00d9ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">// TIME SERIES TIMELINE</h3>
+        <p id="timeline-info" style="margin-bottom:20px;color:#555;font-family:'Courier New',monospace;font-size:12px;letter-spacing:1px"></p>
+        
+        <div id="timeline-container" class="timeline-container">
+            <!-- Images will be dynamically inserted here -->
+        </div>
+
+        <div id="analysis-section" class="analysis-section" style="display: none;">
+            <h3 style="font-family:'Courier New',monospace;color:#00d9ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px">// AI ANALYSIS</h3>
+            <div id="analysis-content" class="analysis-content"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+.map-toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.tool-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--accent-blue);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.tool-btn:hover {
+    background: var(--accent-blue);
+    color: white;
+}
+
+.tool-btn.active {
+    background: var(--accent-blue);
+    color: white;
+}
+
+.tool-btn i {
+    margin-right: 5px;
+}
+
+.timeline-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.timeline-item {
+    background: #000;
+    border: 1px solid #1a1a1a;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.timeline-item:hover {
+    border-color: #00d9ff;
+    box-shadow: 0 0 12px rgba(0,217,255,0.15);
+}
+
+.timeline-item-header {
+    background: #000;
+    border-left: 3px solid #00d9ff;
+    color: #00d9ff;
+    padding: 10px 14px;
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.timeline-item-image {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.timeline-item-info {
+    padding: 10px 14px;
+    background: #050505;
+    border-top: 1px solid #111;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #666;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.change-indicator {
+    display: inline-block;
+    padding: 3px 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.change-low {
+    color: #00ff88;
+    border: 1px solid #00ff88;
+}
+
+.change-medium {
+    color: #ffcc00;
+    border: 1px solid #ffcc00;
+}
+
+.change-high {
+    color: #ff4444;
+    border: 1px solid #ff4444;
+}
+</style>
+
+{% verbatim %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize map
+    const map = L.map('timeseries-map').setView([20.5937, 78.9629], 5);
+    
+    // Add satellite layer
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
+    }).addTo(map);
+    
+    // Add labels layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+        pane: 'shadowPane'
+    }).addTo(map);
+
+    let selectedBbox = null;
+    let drawnRect = null;
+    let locationName = '';
+    let isDrawing = false;
+    let startPoint = null;
+    let tempRect = null;
+
+    // Rectangle drawing style
+    const rectStyle = {
+        color: '#00d9ff',
+        weight: 2,
+        fillColor: '#00d9ff',
+        fillOpacity: 0.1
+    };
+
+    // Enable drawing mode
+    function enableDrawing() {
+        isDrawing = true;
+        map.getContainer().style.cursor = 'crosshair';
+        document.getElementById('draw-btn').classList.add('active');
+    }
+
+    // Disable drawing mode
+    function disableDrawing() {
+        isDrawing = false;
+        map.getContainer().style.cursor = '';
+        startPoint = null;
+        if (tempRect) {
+            map.removeLayer(tempRect);
+            tempRect = null;
+        }
+    }
+
+    // Clear selection
+    function clearSelection() {
+        if (drawnRect) {
+            map.removeLayer(drawnRect);
+            drawnRect = null;
+        }
+        selectedBbox = null;
+        locationName = '';
+        document.getElementById('location-text').textContent = 'Draw rectangle on map';
+        document.getElementById('area-size').textContent = '';
+        document.getElementById('analyze-btn').disabled = true;
+        enableDrawing();
+    }
+
+    // Calculate area in km²
+    function calculateArea(bounds) {
+        const R = 6371; // Earth radius in km
+        const lat1 = bounds.getSouth() * Math.PI / 180;
+        const lat2 = bounds.getNorth() * Math.PI / 180;
+        const lon1 = bounds.getWest() * Math.PI / 180;
+        const lon2 = bounds.getEast() * Math.PI / 180;
+        
+        const latDiff = lat2 - lat1;
+        const lonDiff = lon2 - lon1;
+        const latMid = (lat1 + lat2) / 2;
+        
+        const height = R * latDiff;
+        const width = R * Math.cos(latMid) * lonDiff;
+        
+        return (height * width).toFixed(2);
+    }
+
+    // Draw button click
+    document.getElementById('draw-btn').addEventListener('click', function() {
+        enableDrawing();
+    });
+
+    // Clear button click
+    document.getElementById('clear-btn').addEventListener('click', clearSelection);
+
+    // Mouse down - start drawing
+    map.on('mousedown', function(e) {
+        if (!isDrawing) return;
+        startPoint = e.latlng;
+    });
+
+    // Mouse move - update rectangle
+    map.on('mousemove', function(e) {
+        if (!isDrawing || !startPoint) return;
+        
+        const bounds = L.latLngBounds(startPoint, e.latlng);
+        
+        if (tempRect) {
+            tempRect.setBounds(bounds);
+        } else {
+            tempRect = L.rectangle(bounds, {...rectStyle, dashArray: '5, 5'}).addTo(map);
+        }
+    });
+
+    // Mouse up - finish drawing
+    map.on('mouseup', function(e) {
+        if (!isDrawing || !startPoint) return;
+        
+        const bounds = L.latLngBounds(startPoint, e.latlng);
+        
+        // Remove temp rectangle
+        if (tempRect) {
+            map.removeLayer(tempRect);
+            tempRect = null;
+        }
+        
+        // Remove old rectangle
+        if (drawnRect) {
+            map.removeLayer(drawnRect);
+        }
+        
+        // Create final rectangle
+        drawnRect = L.rectangle(bounds, rectStyle).addTo(map);
+        
+        // Store bbox [min_lon, min_lat, max_lon, max_lat]
+        selectedBbox = [
+            bounds.getWest(),
+            bounds.getSouth(),
+            bounds.getEast(),
+            bounds.getNorth()
+        ];
+        
+        // Calculate and display area
+        const areaSqKm = calculateArea(bounds);
+        document.getElementById('area-size').textContent = `Area: ${areaSqKm} km²`;
+        
+        // Reverse geocode center point
+        const center = bounds.getCenter();
+        fetch(`/api/reverse-geocode/?lat=${center.lat}&lon=${center.lng}`)
+            .then(res => res.json())
+            .then(data => {
+                locationName = data.location || `${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`;
+                document.getElementById('location-text').textContent = locationName;
+            });
+        
+        document.getElementById('analyze-btn').disabled = false;
+        disableDrawing();
+    });
+
+    // Calculate number of images to show based on year span
+    function calculateImageCount(yearSpan) {
+        if (yearSpan <= 1) return 2;
+        if (yearSpan <= 2) return 3;
+        if (yearSpan <= 3) return 5;
+        if (yearSpan <= 5) return 8;
+        return Math.min(15, Math.max(10, yearSpan));
+    }
+
+    // Generate time series
+    document.getElementById('analyze-btn').addEventListener('click', function() {
+        const startYear = parseInt(document.getElementById('start-year').value);
+        const endYear = parseInt(document.getElementById('end-year').value);
+
+        if (!selectedBbox) {
+            alert('Please draw a rectangle on the map');
+            return;
+        }
+
+        if (startYear >= endYear) {
+            alert('End year must be greater than start year');
+            return;
+        }
+
+        const yearSpan = endYear - startYear;
+        const imageCount = calculateImageCount(yearSpan);
+        
+        showLoading(`Fetching ${imageCount} images from ${startYear} to ${endYear}...`);
+
+        fetch('/api/time-series/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                bbox: selectedBbox,
+                start_year: startYear,
+                end_year: endYear,
+                location: locationName,
+                image_count: imageCount
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                displayTimeSeries(data);
+            } else {
+                alert('Error: ' + (data.error || 'Failed to generate time series'));
+            }
+        })
+        .catch(err => {
+            hideLoading();
+            alert('Error: ' + err);
+        });
+    });
+
+    function displayTimeSeries(data) {
+        const container = document.getElementById('timeline-container');
+        container.innerHTML = '';
+
+        const infoText = `Showing ${data.images.length} images from ${data.start_year} to ${data.end_year} for ${locationName}`;
+        document.getElementById('timeline-info').textContent = infoText;
+
+        data.images.forEach((img, idx) => {
+            const item = document.createElement('div');
+            item.className = 'timeline-item';
+
+            let changeClass = '';
+            let changeText = '';
+            if (img.change_pct !== null) {
+                if (img.change_pct < 5) {
+                    changeClass = 'change-low';
+                    changeText = 'Low change';
+                } else if (img.change_pct < 15) {
+                    changeClass = 'change-medium';
+                    changeText = 'Moderate change';
+                } else {
+                    changeClass = 'change-high';
+                    changeText = 'High change';
+                }
+            }
+
+            item.innerHTML = `
+                <div class="timeline-item-header">
+                    ${img.date} (${img.year})
+                    ${img.change_pct !== null ? `<span class="change-indicator ${changeClass}">${img.change_pct}% ${changeText}</span>` : ''}
+                </div>
+                <img src="data:image/png;base64,${img.image}" class="timeline-item-image" alt="${img.date}">
+                <div class="timeline-item-info">
+                    Image ${idx + 1} of ${data.images.length}
+                    ${img.change_pct !== null ? ` | Changed area: ${img.changed_km2} km²` : ''}
+                </div>
+            `;
+
+            container.appendChild(item);
+        });
+
+        document.getElementById('results-section').style.display = 'block';
+
+        if (data.analysis) {
+            document.getElementById('analysis-content').innerHTML = formatAnalysis(data.analysis);
+            document.getElementById('analysis-section').style.display = 'block';
+        }
+
+        // Scroll to results
+        document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function formatAnalysis(text) {
+        if (!text) return '';
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>')
+            .replace(/• /g, '<li>')
+            .replace(/<li>/g, '</li><li>')
+            .replace(/<\/li><li>$/g, '</li>');
+    }
+});
+</script>
+{% endverbatim %}
+{% endblock %}

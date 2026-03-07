@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Home - Satellite Change Detection{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <div class="hero-section">
+        <h2><i class="fas fa-rocket"></i> Welcome to Satellite Change Detection System</h2>
+        <p class="hero-description">
+            Monitor environmental changes, analyze disasters, and track urban development 
+            using satellite imagery from Copernicus Data Space Ecosystem.
+        </p>
+    </div>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">
+                <i class="fas fa-exchange-alt"></i>
+            </div>
+            <h3>Change Detection</h3>
+            <p>Compare satellite images across different time periods to detect and analyze changes in land use, vegetation, and urban development.</p>
+            <a href="{% url 'change_detection' %}" class="feature-btn">Get Started</a>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <h3>Time Series Analysis</h3>
+            <p>Visualize how locations change over time with multiple satellite images distributed across years to track long-term environmental trends.</p>
+            <a href="{% url 'time_series' %}" class="feature-btn">Analyze</a>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3>Disaster Analysis</h3>
+            <p>Monitor and assess natural disasters including floods, fires, earthquakes, and hurricanes with AI-powered insights.</p>
+            <a href="{% url 'disasters' %}" class="feature-btn">Monitor</a>
+        </div>
+    </div>
+
+    <div class="info-section">
+        <h3><i class="fas fa-info-circle"></i> Data Source</h3>
+        <p>This application uses satellite imagery from the <strong>Copernicus Data Space Ecosystem</strong>, 
+        providing free and unlimited access to Sentinel-2 multispectral imagery with 10m resolution.</p>
+        
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="stat-number">10m</span>
+                <span class="stat-label">Resolution</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">5 days</span>
+                <span class="stat-label">Revisit Time</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">Free</span>
+                <span class="stat-label">Unlimited Access</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">AI</span>
+                <span class="stat-label">Powered Analysis</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

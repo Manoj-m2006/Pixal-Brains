@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block title %}Live Uplink - Real-time Satellite Data{% endblock %}
+
+{% block content %}
+<div class="detection-container">
+    <div class="page-header">
+        <h2><i class="fas fa-satellite-dish"></i> Live Satellite Uplink</h2>
+        <p>Get real-time satellite imagery and AI analysis for any location</p>
+    </div>
+
+    <div class="controls-section">
+        <div class="control-row">
+            <div class="control-group location-display wide">
+                <label><i class="fas fa-map-marker-alt"></i> Selected Location</label>
+                <span id="location-text">Click on map to select a location</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="map-section">
+        <div id="live-map" class="leaflet-map"></div>
+    </div>
+
+    <div class="action-section">
+        <button id="uplink-btn" class="primary-btn" disabled>
+            <i class="fas fa-satellite-dish"></i> Initiate Live Uplink
+        </button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results-section" class="results-section" style="display: none;">
+        <h3><i class="fas fa-image"></i> Current Satellite View</h3>
+        
+        <div class="single-image-container">
+            <div class="image-card large">
+                <img id="live-image" src="" alt="Live Satellite Image">
+                <p id="capture-date" class="image-date"></p>
+            </div>
+        </div>
+
+        <div id="analysis-section" class="analysis-section" style="display: none;">
+            <h3><i class="fas fa-robot"></i> AI Analysis</h3>
+            <div id="analysis-content" class="analysis-content"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize map
+    const map = L.map('live-map').setView([20.5937, 78.9629], 5);
+    
+    // Add satellite layer
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
+    }).addTo(map);
+    
+    // Add labels layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+        pane: 'shadowPane'
+    }).addTo(map);
+
+    let selectedLat = null;
+    let selectedLon = null;
+    let marker = null;
+    let locationName = '';
+
+    // Create bbox from lat/lon
+    function createBbox(lat, lon, buffer = 0.05) {
+        return [lon - buffer, lat - buffer, lon + buffer, lat + buffer];
+    }
+
+    // Map click handler
+    map.on('click', function(e) {
+        selectedLat = e.latlng.lat;
+        selectedLon = e.latlng.lng;
+
+        if (marker) {
+            map.removeLayer(marker);
+        }
+        marker = L.marker([selectedLat, selectedLon]).addTo(map);
+
+        // Reverse geocode
+        fetch(`/api/reverse-geocode/?lat=${selectedLat}&lon=${selectedLon}`)
+            .then(res => res.json())
+            .then(data => {
+                locationName = data.location || `${selectedLat.toFixed(4)}, ${selectedLon.toFixed(4)}`;
+                document.getElementById('location-text').textContent = locationName;
+            });
+
+        document.getElementById('uplink-btn').disabled = false;
+    });
+
+    // Live uplink
+    document.getElementById('uplink-btn').addEventListener('click', function() {
+        if (!selectedLat || !selectedLon) {
+            alert('Please select a location on the map');
+            return;
+        }
+
+        const bbox = createBbox(selectedLat, selectedLon);
+        showLoading('Initiating live uplink...');
+
+        fetch('/api/live-uplink/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                bbox: bbox,
+                location: locationName
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            hideLoading();
+            if (data.success) {
+                document.getElementById('live-image').src = 'data:image/png;base64,' + data.image;
+                document.getElementById('capture-date').textContent = 'Latest available: ' + (data.date || 'Recent');
+                document.getElementById('results-section').style.display = 'block';
+                
+                if (data.analysis) {
+                    document.getElementById('analysis-content').innerHTML = formatAnalysis(data.analysis);
+                    document.getElementById('analysis-section').style.display = 'block';
+                }
+            } else {
+                alert('Error: ' + (data.error || 'Failed to get live data'));
+            }
+        })
+        .catch(err => {
+            hideLoading();
+            alert('Error: ' + err);
+        });
+    });
+
+    function formatAnalysis(text) {
+        if (!text) return '';
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>')
+            .replace(/• /g, '<li>')
+            .replace(/<li>/g, '</li><li>')
+            .replace(/<\/li><li>$/g, '</li>');
+    }
+});
+</script>
+{% endblock %}

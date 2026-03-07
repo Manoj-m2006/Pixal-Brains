@@ -1,0 +1,557 @@
+{% extends 'base.html' %}
+{% block title %}Home - Satellite Change Detection{% endblock %}
+
+{% block content %}
+<style>
+.solar-system-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: #000000;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.stars-bg {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+
+.star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    animation: twinkle 3s infinite;
+}
+
+@keyframes twinkle {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+}
+
+.solar-system {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 800px;
+    height: 800px;
+}
+
+.sun {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80px;
+    height: 80px;
+    background: radial-gradient(circle, #ffd700, #ff8c00);
+    border-radius: 50%;
+    box-shadow: 0 0 40px #ffd700, 0 0 80px #ff8c00, 0 0 120px #ff6b00;
+    animation: pulse 4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 40px #ffd700, 0 0 80px #ff8c00, 0 0 120px #ff6b00; }
+    50% { box-shadow: 0 0 60px #ffd700, 0 0 100px #ff8c00, 0 0 140px #ff6b00; }
+}
+
+.orbit {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(0, 217, 255, 0.15);
+    border-radius: 50%;
+    animation: orbitGlow 4s ease-in-out infinite;
+}
+
+@keyframes orbitGlow {
+    0%, 100% { border-color: rgba(0, 217, 255, 0.15); }
+    50% { border-color: rgba(0, 217, 255, 0.3); }
+}
+
+.orbit-mercury { width: 140px; height: 140px; animation: rotate 10s linear infinite; }
+.orbit-venus { width: 180px; height: 180px; animation: rotate 15s linear infinite; }
+.orbit-earth { width: 240px; height: 240px; animation: rotate 20s linear infinite; }
+.orbit-mars { width: 300px; height: 300px; animation: rotate 25s linear infinite; }
+.orbit-jupiter { width: 400px; height: 400px; animation: rotate 35s linear infinite; }
+.orbit-saturn { width: 500px; height: 500px; animation: rotate 45s linear infinite; }
+
+@keyframes rotate {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.planet {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.planet:hover {
+    transform: translateX(-50%) scale(1.3);
+}
+
+.planet-mercury {
+    width: 10px;
+    height: 10px;
+    background: #8c7853;
+}
+
+.planet-venus {
+    width: 14px;
+    height: 14px;
+    background: #ffc649;
+}
+
+.planet-earth {
+    width: 16px;
+    height: 16px;
+    background: linear-gradient(135deg, #1e88e5, #4caf50);
+    box-shadow: 0 0 15px rgba(30, 136, 229, 0.8), inset -3px -3px 8px rgba(0,0,0,0.5);
+    position: relative;
+    animation: earthGlow 3s ease-in-out infinite;
+}
+
+@keyframes earthGlow {
+    0%, 100% { box-shadow: 0 0 15px rgba(30, 136, 229, 0.8), inset -3px -3px 8px rgba(0,0,0,0.5); }
+    50% { box-shadow: 0 0 25px rgba(30, 136, 229, 1), 0 0 40px rgba(76, 175, 80, 0.6), inset -3px -3px 8px rgba(0,0,0,0.5); }
+}
+
+.planet-mars {
+    width: 12px;
+    height: 12px;
+    background: #cd5c5c;
+}
+
+.planet-jupiter {
+    width: 30px;
+    height: 30px;
+    background: linear-gradient(180deg, #c88b3a, #e0ac69);
+}
+
+.planet-saturn {
+    width: 26px;
+    height: 26px;
+    background: #f4d03f;
+    position: relative;
+}
+
+.saturn-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 45px;
+    height: 15px;
+    border: 2px solid rgba(244, 208, 63, 0.5);
+    border-radius: 50%;
+}
+
+.planet-label {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    text-transform: uppercase;
+}
+
+.planet:hover .planet-label {
+    opacity: 1;
+}
+
+.home-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.home-overlay > * {
+    pointer-events: auto;
+}
+
+.hero-title {
+    font-size: 5rem;
+    font-weight: 900;
+    color: #ffffff;
+    text-align: center;
+    margin-bottom: 20px;
+    letter-spacing: 10px;
+    text-shadow: 0 0 40px rgba(0, 217, 255, 0.6), 0 0 80px rgba(0, 217, 255, 0.3);
+    animation: titleGlow 3s ease-in-out infinite;
+}
+
+@keyframes titleGlow {
+    0%, 100% {
+        text-shadow: 0 0 40px rgba(0, 217, 255, 0.6), 0 0 80px rgba(0, 217, 255, 0.3);
+    }
+    50% {
+        text-shadow: 0 0 60px rgba(0, 217, 255, 1), 0 0 120px rgba(0, 217, 255, 0.7), 0 0 160px rgba(0, 217, 255, 0.4);
+    }
+}
+
+.hero-subtitle {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+    margin-bottom: 80px;
+    letter-spacing: 6px;
+    font-weight: 300;
+}
+
+.floating-options {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    align-items: center;
+}
+
+.space-option {
+    text-decoration: none;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    backdrop-filter: none;
+    position: relative;
+    overflow: visible;
+    animation: floatOption 3s ease-in-out infinite;
+}
+
+@keyframes floatOption {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.space-option:nth-child(2) {
+    animation-delay: 0.5s;
+}
+
+.space-option:nth-child(3) {
+    animation-delay: 1s;
+}
+
+.space-option::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 0;
+    height: 0;
+    background: radial-gradient(circle, rgba(0, 217, 255, 0.2), transparent);
+    border-radius: 50%;
+    transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: -1;
+}
+
+.space-option:hover::before {
+    width: 600px;
+    height: 600px;
+}
+
+.space-option:hover {
+    transform: scale(1.2) translateY(-5px);
+}
+
+.option-text {
+    display: block;
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 8px;
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+    transition: all 0.4s ease;
+}
+
+.space-option:hover .option-text {
+    color: #00d9ff;
+    text-shadow: 0 0 30px rgba(0, 217, 255, 0.8), 0 0 60px rgba(0, 217, 255, 0.5);
+}
+
+.option-subtitle {
+    display: block;
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 2px;
+    font-weight: 300;
+    position: relative;
+    z-index: 1;
+}
+
+/* Zoom transition animation */
+.zoom-transition {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: #000000;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.earth-zoom {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 40px;
+    background: radial-gradient(circle, #00d9ff, #0077aa);
+    border-radius: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 40px rgba(0, 217, 255, 0.8), 0 0 80px rgba(0, 217, 255, 0.5);
+}
+
+.earth-zoom.zooming {
+    transform: translate(-50%, -50%) scale(50);
+    box-shadow: 0 0 100px rgba(0, 217, 255, 1), 0 0 200px rgba(0, 217, 255, 0.8);
+}
+
+@media (max-width: 1024px) {
+    .solar-system { width: 600px; height: 600px; }
+    .orbit-saturn { width: 400px; height: 400px; }
+    .orbit-jupiter { width: 320px; height: 320px; }
+    .hero-title { font-size: 3.5rem; letter-spacing: 6px; }
+}
+
+@media (max-width: 768px) {
+    .hero-title { font-size: 2.5rem; letter-spacing: 4px; }
+    .hero-subtitle { font-size: 0.9rem; letter-spacing: 3px; }
+    .floating-options { width: 100%; padding: 0 20px; }
+    .space-option { width: 100%; padding: 20px 40px; }
+    .option-text { font-size: 1.6rem; letter-spacing: 4px; }
+    .solar-system { width: 400px; height: 400px; }
+}
+</style>
+
+<div class="solar-system-container">
+    <div class="stars-bg" id="stars-bg"></div>
+    
+    <div class="solar-system">
+        <div class="sun"></div>
+        
+        <div class="orbit orbit-mercury">
+            <div class="planet planet-mercury">
+                <span class="planet-label">Mercury</span>
+            </div>
+        </div>
+        
+        <div class="orbit orbit-venus">
+            <div class="planet planet-venus">
+                <span class="planet-label">Venus</span>
+            </div>
+        </div>
+        
+        <div class="orbit orbit-earth">
+            <div class="planet planet-earth" id="earth-planet">
+                <span class="planet-label">Earth</span>
+            </div>
+        </div>
+        
+        <div class="orbit orbit-mars">
+            <div class="planet planet-mars">
+                <span class="planet-label">Mars</span>
+            </div>
+        </div>
+        
+        <div class="orbit orbit-jupiter">
+            <div class="planet planet-jupiter">
+                <span class="planet-label">Jupiter</span>
+            </div>
+        </div>
+        
+        <div class="orbit orbit-saturn">
+            <div class="planet planet-saturn">
+                <div class="saturn-ring"></div>
+                <span class="planet-label">Saturn</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="home-overlay">
+    <h1 class="hero-title">VYOM NETRA</h1>
+    <p class="hero-subtitle">EARTH MONITORING SYSTEM</p>
+    
+    <div class="floating-options">
+        <a href="{% url 'change_detection' %}" class="space-option" data-option="change">
+            <span class="option-text">CHANGE DETECTION</span>
+            <span class="option-subtitle">Analyze surface transformations</span>
+        </a>
+        
+        <a href="{% url 'time_series' %}" class="space-option" data-option="timeseries">
+            <span class="option-text">TIME SERIES</span>
+            <span class="option-subtitle">Track trends over years</span>
+        </a>
+        
+        <a href="{% url 'disasters' %}" class="space-option" data-option="disasters">
+            <span class="option-text">DISASTERS</span>
+            <span class="option-subtitle">Real-time global monitoring</span>
+        </a>
+    </div>
+</div>
+
+<div class="zoom-transition" id="zoom-transition">
+    <div class="earth-zoom" id="earth-zoom"></div>
+</div>
+
+<script>
+// Generate stars
+function generateStars() {
+    const starsBg = document.getElementById('stars-bg');
+    for (let i = 0; i < 300; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 100 + '%';
+        star.style.width = (Math.random() * 2 + 0.5) + 'px';
+        star.style.height = star.style.width;
+        star.style.animationDelay = Math.random() * 3 + 's';
+        star.style.animationDuration = (Math.random() * 2 + 2) + 's';
+        starsBg.appendChild(star);
+    }
+}
+
+// Get Earth's current position on screen
+function getEarthPosition() {
+    const earth = document.getElementById('earth-planet');
+    const rect = earth.getBoundingClientRect();
+    return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2
+    };
+}
+
+// Forward zoom: Earth expands to fill screen then navigate
+function zoomToEarth(targetUrl) {
+    const overlay = document.querySelector('.home-overlay');
+    const transition = document.getElementById('zoom-transition');
+    const earthZoom = document.getElementById('earth-zoom');
+
+    const earthPos = getEarthPosition();
+
+    // Disable CSS class transitions — use inline styles for full control
+    earthZoom.style.transition = 'none';
+    earthZoom.style.left = earthPos.x + 'px';
+    earthZoom.style.top = earthPos.y + 'px';
+    earthZoom.style.transform = 'translate(-50%, -50%) scale(1)';
+    earthZoom.style.opacity = '1';
+
+    // Make the black overlay visible immediately
+    transition.style.opacity = '1';
+    transition.style.pointerEvents = 'all';
+
+    // Fade out the title/options
+    overlay.style.transition = 'opacity 0.3s ease';
+    overlay.style.opacity = '0';
+
+    // Force browser to register starting state before animating
+    earthZoom.getBoundingClientRect();
+
+    // Now animate the zoom
+    earthZoom.style.transition = 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)';
+    earthZoom.style.transform = 'translate(-50%, -50%) scale(80)';
+
+    setTimeout(() => {
+        window.location.href = targetUrl;
+    }, 1100);
+}
+
+// Attach click handlers to all nav options
+document.querySelectorAll('.space-option').forEach(option => {
+    option.addEventListener('click', function(e) {
+        e.preventDefault();
+        zoomToEarth(this.getAttribute('href'));
+    });
+});
+
+// Return animation: Earth shrinks from full screen back to orbit
+function checkReturnAnimation() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('return') !== 'true') return;
+
+    window.history.replaceState({}, document.title, '/');
+
+    const solarSystem = document.querySelector('.solar-system-container');
+    const overlay = document.querySelector('.home-overlay');
+    const transition = document.getElementById('zoom-transition');
+    const earthZoom = document.getElementById('earth-zoom');
+
+    // Hide scene initially — start from full zoomed Earth
+    solarSystem.style.opacity = '0';
+    overlay.style.opacity = '0';
+
+    // Show the black overlay with earth filling the screen
+    transition.style.opacity = '1';
+    transition.style.pointerEvents = 'all';
+    earthZoom.style.transition = 'none';
+    earthZoom.style.left = '50%';
+    earthZoom.style.top = '50%';
+    earthZoom.style.transform = 'translate(-50%, -50%) scale(80)';
+    earthZoom.style.opacity = '1';
+
+    // Force reflow
+    earthZoom.getBoundingClientRect();
+
+    setTimeout(() => {
+        const earthPos = getEarthPosition();
+
+        // Fade in the solar system behind
+        solarSystem.style.transition = 'opacity 0.8s ease';
+        solarSystem.style.opacity = '1';
+
+        // Shrink Earth back to its orbit position
+        earthZoom.style.transition = 'all 1s cubic-bezier(0.4, 0, 0.2, 1)';
+        earthZoom.style.left = earthPos.x + 'px';
+        earthZoom.style.top = earthPos.y + 'px';
+        earthZoom.style.transform = 'translate(-50%, -50%) scale(0)';
+
+        setTimeout(() => {
+            // Hide overlay
+            transition.style.opacity = '0';
+            transition.style.pointerEvents = 'none';
+            earthZoom.style.opacity = '0';
+
+            // Fade in title and options
+            overlay.style.transition = 'opacity 0.8s ease';
+            overlay.style.opacity = '1';
+        }, 1000);
+    }, 150);
+}
+
+// Initialize
+generateStars();
+checkReturnAnimation();
+</script>
+{% endblock %}

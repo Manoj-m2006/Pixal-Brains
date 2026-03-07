@@ -1,0 +1,1308 @@
+{% extends 'base.html' %}
+{% block title %}Disaster Monitoring - Interactive Globe{% endblock %}
+
+{% block content %}
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.globe-container {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 60px);
+    background: #000000;
+    overflow: hidden;
+    z-index: 1;
+}
+
+/* Pin footer to bottom on disasters page */
+.app-footer {
+    position: fixed !important;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin-top: 0 !important;
+    padding: 7px 20px !important;
+    z-index: 500;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(0, 217, 255, 0.1);
+    font-size: 0.75rem !important;
+}
+
+.stars {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0.5;
+}
+
+#globe-canvas {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    position: relative;
+    z-index: 3;
+    touch-action: none; /* Prevent default touch behaviors */
+}
+
+#globe-canvas canvas {
+    cursor: grab !important;
+}
+
+#globe-canvas:active,
+#globe-canvas canvas:active {
+    cursor: grabbing !important;
+}
+
+.disaster-feed-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.95);
+    color: #ffffff;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(0, 217, 255, 0.3);
+    z-index: 1000;
+    backdrop-filter: blur(12px);
+}
+
+.feed-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.feed-content {
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 5px;
+    min-height: 20px;
+    transition: opacity 0.3s ease;
+}
+
+.control-panel {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: none;
+    border: none;
+    padding: 0;
+    z-index: 1000;
+    min-width: 220px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+.control-panel-header {
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(0, 217, 255, 0.45);
+    margin-bottom: 16px;
+}
+
+.year-filter {
+    margin-bottom: 16px;
+}
+
+.year-filter > .filter-section-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(0, 217, 255, 0.45);
+}
+
+.year-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 2px;
+    background: rgba(0, 217, 255, 0.2);
+    border: none;
+    outline: none;
+    margin: 10px 0;
+    cursor: pointer;
+}
+
+.year-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #00d9ff;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(0, 217, 255, 0.9);
+}
+
+.year-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #00d9ff;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 8px rgba(0, 217, 255, 0.9);
+}
+
+.year-display {
+    font-family: 'Courier New', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: #00d9ff;
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
+    margin: 8px 0;
+}
+
+.year-range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,0.25);
+    margin-top: 2px;
+}
+
+.disaster-type-filters {
+    margin-top: 16px;
+}
+
+.filter-section-header {
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(0, 217, 255, 0.45);
+    margin-bottom: 10px;
+}
+
+.disaster-type-filters label {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 3px 0;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: none;
+    border-radius: 0;
+    transition: opacity 0.2s;
+}
+
+.disaster-type-filters label.unchecked {
+    opacity: 0.3;
+}
+
+.filter-bar {
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    margin-right: 10px;
+    flex-shrink: 0;
+    transition: opacity 0.2s, box-shadow 0.2s;
+}
+
+.disaster-type-filters input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.legend {
+    position: fixed;
+    bottom: 36px;
+    left: 20px;
+    z-index: 1000;
+    padding: 0;
+    background: none;
+    border: none;
+}
+
+.legend-header {
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(0, 217, 255, 0.45);
+    margin-bottom: 10px;
+    padding-left: 12px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 3px 0;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 400;
+    transition: opacity 0.2s;
+}
+
+.legend-item:hover {
+    opacity: 1 !important;
+}
+
+.legend-bar {
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+
+.legend-icon {
+    display: none;
+}
+
+.disaster-tooltip {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 10000;
+    max-width: 300px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    display: none;
+    backdrop-filter: blur(10px);
+}
+
+.tooltip-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 6px;
+    color: #fff;
+}
+
+.tooltip-location {
+    font-size: 12px;
+    color: #bbb;
+    margin-bottom: 4px;
+}
+
+.tooltip-date {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 6px;
+}
+
+.tooltip-description {
+    font-size: 12px;
+    line-height: 1.4;
+    color: #ddd;
+}
+
+.tooltip-hint {
+    font-size: 10px;
+    color: #666;
+    margin-top: 8px;
+    font-style: italic;
+    border-top: 1px solid #444;
+    padding-top: 6px;
+}
+
+.day-by-day-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.9);
+    z-index: 20000;
+    overflow-y: auto;
+}
+
+.modal-content {
+    background: #000000;
+    max-width: 1200px;
+    margin: 50px auto;
+    border-radius: 12px;
+    padding: 32px;
+    position: relative;
+    border: 1px solid rgba(0, 217, 255, 0.3);
+    box-shadow: 0 20px 60px rgba(0,217,255,0.2);
+    color: #ffffff;
+}
+
+.modal-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 28px;
+    cursor: pointer;
+    color: #b8b8b8;
+    background: rgba(0, 217, 255, 0.1);
+    border: 1px solid rgba(0, 217, 255, 0.3);
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+    background: #00d9ff;
+    color: #000000;
+    border-color: #00d9ff;
+}
+
+.modal-header {
+    margin-bottom: 25px;
+}
+
+.modal-title {
+    font-size: 24px;
+    margin-bottom: 8px;
+    color: #ffffff;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.modal-subtitle {
+    font-size: 14px;
+    color: #b8b8b8;
+    font-weight: 400;
+}
+
+.timeline-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+    margin-top: 25px;
+}
+
+.timeline-item {
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border: 1px solid rgba(0, 217, 255, 0.2);
+    transition: all 0.2s ease;
+}
+
+.timeline-item:hover {
+    transform: translateY(-2px);
+    border-color: rgba(0, 217, 255, 0.5);
+    box-shadow: 0 4px 16px rgba(0,217,255,0.2);
+}
+
+.timeline-item-header {
+    background: #00d9ff;
+    color: white;
+    padding: 10px 14px;
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.day-number {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+    font-size: 12px;
+}
+
+.timeline-item-image {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    display: block;
+}
+
+.timeline-item-info {
+    padding: 12px 15px;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.change-indicator {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.change-low {
+    background: rgba(40, 167, 69, 0.2);
+    color: #4ecca3;
+    border: 1px solid #4ecca3;
+}
+
+.change-medium {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+    border: 1px solid #ffc107;
+}
+
+.change-high {
+    background: rgba(220, 53, 69, 0.2);
+    color: #ff6b6b;
+    border: 1px solid #ff6b6b;
+}
+
+.analysis-section {
+    margin-top: 30px;
+    padding: 25px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    border-left: 4px solid #667eea;
+}
+
+.analysis-section h3 {
+    margin-top: 0;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.analysis-content {
+    line-height: 1.8;
+    color: #ddd;
+}
+
+.loading-globe {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: white;
+    z-index: 999;
+}
+
+.loading-globe i {
+    font-size: 48px;
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+    margin-top: 20px;
+    font-size: 18px;
+    color: #aaa;
+}
+
+.stats-panel {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+.stats-panel h4 {
+    display: none;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    font-size: 10px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.35);
+}
+
+.stat-value {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #00d9ff;
+}
+</style>
+
+<!-- Globe Container -->
+<div class="globe-container">
+    <!-- Stars Background -->
+    <div class="stars" id="stars"></div>
+    
+    <!-- Globe Canvas -->
+    <div id="globe-canvas"></div>
+    
+    <!-- Loading Indicator -->
+    <div class="loading-globe" id="loading-globe">
+        <i class="fas fa-globe-asia fa-spin"></i>
+        <div class="loading-text">Initializing Earth...</div>
+    </div>
+</div>
+
+<!-- Live Disaster Feed Banner -->
+<div class="disaster-feed-banner">
+    <div class="feed-header">
+        <i class="fas fa-satellite-dish"></i>
+        <span>🔴 LIVE DISASTER UPDATES</span>
+    </div>
+    <div class="feed-content" id="live-feed">
+        Loading current disasters worldwide...
+    </div>
+</div>
+
+<!-- Control Panel -->
+<div class="control-panel">
+    <div class="control-panel-header">// filters</div>
+
+    <div class="year-filter">
+        <span class="filter-section-label">// year</span>
+        <div class="year-display" id="year-display">2013–2026</div>
+        <input type="range" min="2013" max="2026" value="2026" class="year-slider" id="year-slider">
+        <div class="year-range-labels">
+            <span>2013</span>
+            <span>all</span>
+            <span>2026</span>
+        </div>
+    </div>
+
+    <div class="disaster-type-filters">
+        <div class="filter-section-header">// types</div>
+        <label>
+            <input type="checkbox" class="disaster-filter" data-type="flood" checked>
+            <div class="filter-bar" style="background:#3498db; box-shadow:0 0 6px #3498db;"></div>
+            <span style="color:#3498db;">Floods</span>
+        </label>
+        <label>
+            <input type="checkbox" class="disaster-filter" data-type="fire" checked>
+            <div class="filter-bar" style="background:#e74c3c; box-shadow:0 0 6px #e74c3c;"></div>
+            <span style="color:#e74c3c;">Wildfires</span>
+        </label>
+        <label>
+            <input type="checkbox" class="disaster-filter" data-type="earthquake" checked>
+            <div class="filter-bar" style="background:#e67e22; box-shadow:0 0 6px #e67e22;"></div>
+            <span style="color:#e67e22;">Earthquakes</span>
+        </label>
+        <label>
+            <input type="checkbox" class="disaster-filter" data-type="hurricane" checked>
+            <div class="filter-bar" style="background:#9b59b6; box-shadow:0 0 6px #9b59b6;"></div>
+            <span style="color:#9b59b6;">Hurricanes</span>
+        </label>
+        <label>
+            <input type="checkbox" class="disaster-filter" data-type="landslide" checked>
+            <div class="filter-bar" style="background:#95a5a6; box-shadow:0 0 6px #95a5a6;"></div>
+            <span style="color:#95a5a6;">Landslides</span>
+        </label>
+        <label>
+            <input type="checkbox" class="disaster-filter" data-type="drought" checked>
+            <div class="filter-bar" style="background:#f39c12; box-shadow:0 0 6px #f39c12;"></div>
+            <span style="color:#f39c12;">Droughts</span>
+        </label>
+    </div>
+
+    <div class="stats-panel">
+        <div class="filter-section-header" style="margin-top:18px;">// stats</div>
+        <div class="stat-item">
+            <span>total</span>
+            <span class="stat-value" id="stat-total">0</span>
+        </div>
+        <div class="stat-item">
+            <span>visible</span>
+            <span class="stat-value" id="stat-visible">0</span>
+        </div>
+        <div class="stat-item">
+            <span>year</span>
+            <span class="stat-value" id="stat-year">all</span>
+        </div>
+    </div>
+</div>
+
+<!-- Disaster Tooltip -->
+<div class="disaster-tooltip" id="disaster-tooltip">
+    <div class="tooltip-title" id="tooltip-title"></div>
+    <div class="tooltip-location" id="tooltip-location"></div>
+    <div class="tooltip-date" id="tooltip-date"></div>
+    <div class="tooltip-description" id="tooltip-description"></div>
+    <div class="tooltip-hint">Click to view day-by-day progression</div>
+</div>
+
+<!-- Day-by-Day Modal -->
+<div class="day-by-day-modal" id="day-by-day-modal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeDayByDayModal()">×</button>
+        <div class="modal-header">
+            <h2 class="modal-title" id="modal-title">Disaster Progression</h2>
+            <p class="modal-subtitle" id="modal-subtitle"></p>
+        </div>
+        <div id="modal-loading" style="text-align: center; padding: 40px; color: #aaa;">
+            <i class="fas fa-spinner fa-spin fa-3x"></i>
+            <p style="margin-top: 20px;">Loading day-by-day satellite imagery...</p>
+        </div>
+        <div id="modal-timeline" class="timeline-container" style="display: none;"></div>
+        <div id="modal-analysis" class="analysis-section" style="display: none;"></div>
+    </div>
+</div>
+
+<!-- Three.js Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+{% verbatim %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let scene, camera, renderer, earth, clouds;
+    let markers = [];
+    let allDisasters = [];
+    let filteredDisasters = [];
+    let isRotating = true;  // Start with rotation enabled
+    let isDragging = false;
+    let previousMousePosition = { x: 0, y: 0 };
+    let rotationSpeed = 0.002;  // Increased from 0.001 for more visible rotation
+    let hoveredMarker = null;
+    let liveDisasters = [];
+    let currentDisasterIndex = 0;
+    
+    // Initialize Three.js Scene
+    function initGlobe() {
+        const container = document.getElementById('globe-canvas');
+        scene = new THREE.Scene();
+        
+        // Camera
+        camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.z = 2.5;
+        
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+        
+        // Ambient Light
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        // Directional Light (Sun)
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        directionalLight.position.set(5, 3, 5);
+        scene.add(directionalLight);
+        
+        // Create Earth
+        const geometry = new THREE.SphereGeometry(1, 64, 64);
+        
+        // Load Earth Texture
+        const textureLoader = new THREE.TextureLoader();
+        
+        // Try to load real Earth texture from CDN
+        const earthTexture = textureLoader.load(
+            'https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg',
+            // Success callback
+            function(texture) {
+                console.log('Earth texture loaded successfully');
+            },
+            // Progress callback
+            undefined,
+            // Error callback - fallback to procedural texture
+            function(err) {
+                console.warn('Could not load Earth texture, using fallback');
+                // Use a more realistic blue marble color scheme
+                earth.material.color.setHex(0x1a4d7a);
+                earth.material.emissive.setHex(0x0a1f33);
+            }
+        );
+        
+        const earthMaterial = new THREE.MeshPhongMaterial({
+            map: earthTexture,
+            bumpScale: 0.05,
+            specular: 0x333333,
+            shininess: 5,
+            wireframe: false
+        });
+        
+        earth = new THREE.Mesh(geometry, earthMaterial);
+        scene.add(earth);
+        
+        // Add atmosphere glow
+        const glowGeometry = new THREE.SphereGeometry(1.05, 64, 64);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x4488ff,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.BackSide
+        });
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        scene.add(glow);
+        
+        // Mouse events - attach to renderer's canvas
+        const canvas = renderer.domElement;
+        canvas.addEventListener('mousedown', onMouseDown);
+        canvas.addEventListener('mousemove', onMouseMove);
+        canvas.addEventListener('mouseup', onMouseUp);
+        canvas.addEventListener('mouseleave', onMouseUp);
+        canvas.addEventListener('click', onMouseClick);
+        canvas.addEventListener('wheel', onMouseWheel, { passive: false });
+        
+        // Window resize
+        window.addEventListener('resize', onWindowResize);
+        
+        // Start animation
+        animate();
+        
+        console.log('Globe initialized successfully');
+        
+        // Hide loading
+        document.getElementById('loading-globe').style.display = 'none';
+    }
+    
+    // Generate stars
+    function generateStars() {
+        const starsContainer = document.getElementById('stars');
+        for (let i = 0; i < 200; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.width = (Math.random() * 2 + 1) + 'px';
+            star.style.height = star.style.width;
+            star.style.animationDelay = Math.random() * 3 + 's';
+            starsContainer.appendChild(star);
+        }
+    }
+    
+    // Convert lat/lon to 3D position
+    function latLonToVector3(lat, lon, radius) {
+        const phi = (90 - lat) * (Math.PI / 180);
+        const theta = (lon + 180) * (Math.PI / 180);
+        
+        const x = -(radius * Math.sin(phi) * Math.cos(theta));
+        const z = (radius * Math.sin(phi) * Math.sin(theta));
+        const y = (radius * Math.cos(phi));
+        
+        return new THREE.Vector3(x, y, z);
+    }
+    
+    // Get disaster color
+    function getDisasterColor(type) {
+        const colors = {
+            flood: 0x3498db,
+            fire: 0xe74c3c,
+            earthquake: 0xe67e22,
+            hurricane: 0x9b59b6,
+            landslide: 0x95a5a6,
+            drought: 0xf39c12
+        };
+        return colors[type] || 0xffffff;
+    }
+    
+    // Add disaster marker
+    function addDisasterMarker(disaster) {
+        const position = latLonToVector3(disaster.lat, disaster.lon, 1.02);
+        
+        // Create marker (glowing sphere)
+        const markerGeometry = new THREE.SphereGeometry(0.015, 16, 16);
+        const markerMaterial = new THREE.MeshBasicMaterial({
+            color: getDisasterColor(disaster.type),
+            transparent: true,
+            opacity: 0.8
+        });
+        const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+        marker.position.copy(position);
+        
+        // Create glow effect
+        const glowGeometry = new THREE.SphereGeometry(0.025, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: getDisasterColor(disaster.type),
+            transparent: true,
+            opacity: 0.3
+        });
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        glow.position.copy(position);
+        
+        // Pulsating animation
+        marker.userData = {
+            disaster: disaster,
+            glow: glow,
+            baseScale: 1,
+            pulseSpeed: Math.random() * 0.02 + 0.01
+        };
+        
+        // Add markers as children of earth so they rotate with it
+        earth.add(marker);
+        earth.add(glow);
+        markers.push(marker);
+    }
+    
+    // Remove all markers
+    function clearMarkers() {
+        markers.forEach(marker => {
+            earth.remove(marker);
+            if (marker.userData.glow) {
+                earth.remove(marker.userData.glow);
+            }
+        });
+        markers = [];
+    }
+    
+    // Update markers based on filters
+    function updateMarkers() {
+        clearMarkers();
+        
+        const yearValue = parseInt(document.getElementById('year-slider').value);
+        const selectedTypes = Array.from(document.querySelectorAll('.disaster-filter:checked'))
+            .map(cb => cb.dataset.type);
+        
+        filteredDisasters = allDisasters.filter(disaster => {
+            const yearMatch = yearValue === 2026 || disaster.year === yearValue;
+            const typeMatch = selectedTypes.includes(disaster.type);
+            return yearMatch && typeMatch;
+        });
+        
+        filteredDisasters.forEach(disaster => addDisasterMarker(disaster));
+        
+        // Update stats
+        document.getElementById('stat-total').textContent = allDisasters.length;
+        document.getElementById('stat-visible').textContent = filteredDisasters.length;
+        document.getElementById('stat-year').textContent = yearValue === 2026 ? 'All' : yearValue;
+    }
+    
+    // Mouse events
+    function onMouseDown(e) {
+        if (e.button === 0) { // Left mouse button only
+            isDragging = true;
+            isRotating = false;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+            e.target.style.cursor = 'grabbing';
+            e.preventDefault();
+        }
+    }
+    
+    function onMouseMove(e) {
+        if (isDragging) {
+            const deltaX = e.clientX - previousMousePosition.x;
+            const deltaY = e.clientY - previousMousePosition.y;
+            
+            // Rotate earth (markers will rotate with it automatically)
+            earth.rotation.y += deltaX * 0.005;
+            earth.rotation.x += deltaY * 0.005;
+            
+            // Clamp X rotation to prevent flipping
+            earth.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, earth.rotation.x));
+            
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+            e.preventDefault();
+        } else {
+            // Check for marker hover
+            checkMarkerHover(e);
+        }
+    }
+    
+    function onMouseUp(e) {
+        if (isDragging) {
+            isDragging = false;
+            e.target.style.cursor = 'grab';
+            // Resume rotation after a short delay
+            setTimeout(() => {
+                if (!isDragging) {
+                    isRotating = true;
+                }
+            }, 500);
+        }
+    }
+    
+    function onMouseWheel(e) {
+        e.preventDefault();
+        
+        // Zoom in/out with mouse wheel
+        const zoomSpeed = 0.1;
+        const minZoom = 1.5;
+        const maxZoom = 5;
+        
+        if (e.deltaY < 0) {
+            // Zoom in (scroll up)
+            camera.position.z = Math.max(minZoom, camera.position.z - zoomSpeed);
+        } else {
+            // Zoom out (scroll down)
+            camera.position.z = Math.min(maxZoom, camera.position.z + zoomSpeed);
+        }
+    }
+    
+    function _placeTooltip(tooltip, mx, my) {
+        const tw  = tooltip.offsetWidth;
+        const th  = tooltip.offsetHeight;
+        const vw  = window.innerWidth;
+        const vh  = window.innerHeight;
+        const gap = 14;
+        let left  = mx + gap;
+        let top   = my + gap;
+        if (left + tw > vw - 6) left = mx - tw - gap;
+        if (top  + th > vh - 6) top  = my - th - gap;
+        tooltip.style.left = Math.max(6, left) + 'px';
+        tooltip.style.top  = Math.max(6, top)  + 'px';
+    }
+
+    function checkMarkerHover(e) {
+        const mouse = new THREE.Vector2();
+        const container = document.getElementById('globe-canvas');
+        const rect = container.getBoundingClientRect();
+        mouse.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+        mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+        
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+        
+        const intersects = raycaster.intersectObjects(markers);
+        const tooltip = document.getElementById('disaster-tooltip');
+        
+        if (intersects.length > 0) {
+            const marker   = intersects[0].object;
+            const disaster = marker.userData.disaster;
+            const mx = e.clientX;
+            const my = e.clientY;
+            
+            if (hoveredMarker !== marker) {
+                hoveredMarker = marker;
+                document.getElementById('tooltip-title').textContent       = disaster.name;
+                document.getElementById('tooltip-location').textContent    = disaster.location;
+                document.getElementById('tooltip-date').textContent        = `${disaster.start_date} to ${disaster.end_date}`;
+                document.getElementById('tooltip-description').textContent = disaster.description;
+
+                // Show off-screen first so browser can measure it, then place
+                tooltip.style.left    = '-9999px';
+                tooltip.style.top     = '-9999px';
+                tooltip.style.display = 'block';
+                requestAnimationFrame(() => _placeTooltip(tooltip, mx, my));
+            } else {
+                _placeTooltip(tooltip, mx, my);
+            }
+
+            document.body.style.cursor = 'pointer';
+        } else {
+            tooltip.style.display = 'none';
+            hoveredMarker = null;
+            document.body.style.cursor = 'default';
+        }
+    }
+    
+    function onMouseClick(e) {
+        if (hoveredMarker && !isDragging) {
+            const disaster = hoveredMarker.userData.disaster;
+            openDayByDay(disaster);
+        }
+    }
+    
+    function onWindowResize() {
+        const c = document.getElementById('globe-canvas');
+        camera.aspect = c.clientWidth / c.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(c.clientWidth, c.clientHeight);
+    }
+    
+    // Animation loop
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        // Auto-rotate when not dragging
+        if (isRotating && earth) {
+            earth.rotation.y += rotationSpeed;
+        }
+        
+        // Animate markers (pulsating effect)
+        markers.forEach(marker => {
+            const scale = 1 + Math.sin(Date.now() * marker.userData.pulseSpeed) * 0.3;
+            marker.scale.set(scale, scale, scale);
+            if (marker.userData.glow) {
+                marker.userData.glow.scale.set(scale * 1.2, scale * 1.2, scale * 1.2);
+            }
+        });
+        
+        if (renderer && scene && camera) {
+            renderer.render(scene, camera);
+        }
+    }
+    
+    // Fetch live disasters
+    function fetchLiveDisasters() {
+        fetch('/api/live-disasters/')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.disasters.length > 0) {
+                    liveDisasters = data.disasters;
+                    rotateLiveDisasters();
+                } else {
+                    document.getElementById('live-feed').textContent = 'No recent disasters reported';
+                }
+            })
+            .catch(err => {
+                console.error('Failed to fetch live disasters:', err);
+                document.getElementById('live-feed').textContent = 'Unable to load live updates';
+            });
+    }
+    
+    // Rotate through live disasters
+    function rotateLiveDisasters() {
+        if (liveDisasters.length === 0) return;
+        
+        const feedEl = document.getElementById('live-feed');
+        feedEl.style.opacity = '0';
+        
+        setTimeout(() => {
+            feedEl.textContent = liveDisasters[currentDisasterIndex];
+            feedEl.style.opacity = '1';
+            currentDisasterIndex = (currentDisasterIndex + 1) % liveDisasters.length;
+        }, 300);
+        
+        setTimeout(rotateLiveDisasters, 5000);
+    }
+    
+    // Load historical disasters
+    function loadHistoricalDisasters() {
+        fetch('/api/historical-disasters/?type=all')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.events.length > 0) {
+                    allDisasters = data.events;
+                    updateMarkers();
+                }
+            })
+            .catch(err => {
+                console.error('Failed to load disasters:', err);
+            });
+    }
+    
+    // Open day-by-day modal with STREAMING satellite images
+    window.openDayByDay = function(event) {
+        const modal         = document.getElementById('day-by-day-modal');
+        const modalTitle    = document.getElementById('modal-title');
+        const modalSubtitle = document.getElementById('modal-subtitle');
+        const modalLoading  = document.getElementById('modal-loading');
+        const modalTimeline = document.getElementById('modal-timeline');
+        const modalAnalysis = document.getElementById('modal-analysis');
+
+        modalTitle.textContent    = event.name;
+        modalSubtitle.textContent = `${event.location} • ${event.start_date} to ${event.end_date}`;
+        modalLoading.innerHTML    = `
+            <i class="fas fa-satellite fa-spin fa-3x" style="color:#00d9ff"></i>
+            <p style="margin-top:20px;color:#aaa;font-family:monospace">FETCHING SATELLITE IMAGERY IN PARALLEL</p>
+            <p id="stream-counter" style="font-family:'Courier New',monospace;color:#00d9ff;margin-top:8px;letter-spacing:2px">0 images loaded</p>`;
+        modalLoading.style.display  = 'block';
+        modalTimeline.style.display = 'none';
+        modalTimeline.innerHTML     = '';
+        modalAnalysis.style.display = 'none';
+        modal.style.display         = 'block';
+
+        const buffer = 0.5;
+        const bbox   = [event.lon - buffer, event.lat - buffer, event.lon + buffer, event.lat + buffer];
+        let totalExpected = 0;
+        let loadedCount   = 0;
+
+        function addImageToTimeline(img) {
+            const timeline = document.getElementById('modal-timeline');
+            const item     = document.createElement('div');
+            item.className        = 'timeline-item';
+            item.dataset.dayNumber = img.day_number;
+            item.innerHTML = `
+                <div class="timeline-item-header">
+                    <span>${img.date}</span>
+                    <span class="day-number">Day ${img.day_number}</span>
+                </div>
+                <img src="data:image/jpeg;base64,${img.image}" class="timeline-item-image" alt="${img.date}" loading="lazy">
+                <div class="timeline-item-info">Satellite image</div>`;
+
+            // Insert in sorted order by day_number
+            let inserted = false;
+            for (const existing of timeline.querySelectorAll('.timeline-item')) {
+                if (parseInt(existing.dataset.dayNumber) > img.day_number) {
+                    timeline.insertBefore(item, existing);
+                    inserted = true;
+                    break;
+                }
+            }
+            if (!inserted) timeline.appendChild(item);
+        }
+
+        function showAIButton() {
+            const ai = document.getElementById('modal-analysis');
+            window._currentAIEvent = { event, bbox };
+            ai.innerHTML = `
+                <button id="ai-analyze-btn" onclick="runAIAnalysis()" style="
+                    background:transparent;border:1px solid #00d9ff;color:#00d9ff;
+                    font-family:'Courier New',monospace;font-size:12px;padding:10px 24px;
+                    cursor:pointer;letter-spacing:2px;text-transform:uppercase;margin:10px 0;">
+                    // ANALYZE WITH GEMINI AI
+                </button>`;
+            ai.style.display = 'block';
+        }
+
+        fetch('/api/disaster-day-by-day-stream/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                event_id:     event.id,
+                bbox:         bbox,
+                start_date:   event.start_date,
+                end_date:     event.end_date,
+                disaster_type: event.type || 'disaster',
+                location:     event.location
+            })
+        }).then(response => {
+            const reader  = response.body.getReader();
+            const decoder = new TextDecoder();
+            let lineBuf   = '';
+
+            function processLine(line) {
+                line = line.trim();
+                if (!line) return;
+                try {
+                    const msg = JSON.parse(line);
+                    if (msg.type === 'header') {
+                        totalExpected = msg.total_images;
+                        modalTimeline.style.display = 'grid'; // show grid early
+                    } else if (msg.type === 'image') {
+                        loadedCount++;
+                        const c = document.getElementById('stream-counter');
+                        if (c) c.textContent = `${loadedCount} / ${totalExpected} images loaded`;
+                        addImageToTimeline(msg);
+                        if (loadedCount >= totalExpected) {
+                            modalLoading.style.display = 'none';
+                            showAIButton();
+                        }
+                    } else if (msg.type === 'done') {
+                        modalLoading.style.display = 'none';
+                        if (loadedCount > 0) showAIButton();
+                        else {
+                            modalTimeline.innerHTML    = '<p style="text-align:center;padding:40px;color:#aaa;font-family:monospace">No imagery available for this event region.</p>';
+                            modalTimeline.style.display = 'block';
+                        }
+                    }
+                } catch (e) { /* skip malformed lines */ }
+            }
+
+            function pump() {
+                return reader.read().then(({ done, value }) => {
+                    if (done) { processLine(lineBuf); return; }
+                    lineBuf += decoder.decode(value, { stream: true });
+                    const parts = lineBuf.split('\n');
+                    lineBuf = parts.pop();
+                    parts.forEach(processLine);
+                    return pump();
+                });
+            }
+            return pump();
+        }).catch(err => {
+            modalLoading.style.display  = 'none';
+            modalTimeline.innerHTML     = `<p style="text-align:center;padding:40px;color:#aaa;font-family:monospace">ERROR: ${err}</p>`;
+            modalTimeline.style.display = 'block';
+        });
+    };
+
+    window.runAIAnalysis = function() {
+        const analysis = document.getElementById('modal-analysis');
+        const { event, bbox } = window._currentAIEvent || {};
+        if (!event) return;
+
+        analysis.innerHTML = `
+            <div style="text-align:center;padding:20px;">
+                <i class="fas fa-robot fa-spin" style="color:#00d9ff;font-size:2em"></i>
+                <p style="margin-top:12px;font-family:monospace;color:#888;letter-spacing:2px">RUNNING GEMINI AI ANALYSIS...</p>
+            </div>`;
+
+        fetch('/api/disaster-day-by-day-ai/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                bbox:          bbox,
+                start_date:    event.start_date,
+                end_date:      event.end_date,
+                disaster_type: event.type || 'disaster',
+                location:      event.location
+            })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                analysis.innerHTML = `
+                    <h3 style="color:#00d9ff;font-family:monospace;letter-spacing:2px;margin-bottom:12px">// AI ANALYSIS</h3>
+                    <div class="analysis-content">${formatAnalysis(data.analysis)}</div>`;
+            } else {
+                analysis.innerHTML = `<p style="color:#ff4444;font-family:monospace">AI ANALYSIS FAILED: ${data.error}</p>`;
+            }
+        }).catch(err => {
+            analysis.innerHTML = `<p style="color:#ff4444;font-family:monospace">ERROR: ${err}</p>`;
+        });
+    };
+
+    // Close day-by-day modal
+    window.closeDayByDayModal = function() {
+        document.getElementById('day-by-day-modal').style.display = 'none';
+    };
+
+
+    function formatAnalysis(text) {
+        if (!text) return '';
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>')
+            .replace(/• /g, '<li>')
+            .replace(/<li>/g, '</li><li>')
+            .replace(/<\/li><li>$/g, '</li>');
+    }
+    
+    // Year slider
+    document.getElementById('year-slider').addEventListener('input', function(e) {
+        const year = parseInt(e.target.value);
+        document.getElementById('year-display').textContent = year === 2026 ? '2013-2026' : year;
+        updateMarkers();
+    });
+    
+    // Disaster type filters
+    document.querySelectorAll('.disaster-filter').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const label = this.closest('label');
+            if (label) label.classList.toggle('unchecked', !this.checked);
+            updateMarkers();
+        });
+    });
+    
+    // Initialize
+    generateStars();
+    initGlobe();
+    fetchLiveDisasters();
+    loadHistoricalDisasters();
+    
+    // Refresh live disasters every 5 minutes
+    setInterval(fetchLiveDisasters, 300000);
+});
+</script>
+{% endverbatim %}
+{% endblock %}

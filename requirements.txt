@@ -1,6 +1,7 @@
-streamlit
-folium
-streamlit-folium
+# Core Reflex Framework
+reflex>=0.6.0
+
+# Backend Dependencies
 sentinelhub
 python-dotenv
 pillow
@@ -10,3 +11,10 @@ transformers
 torch
 requests
 google-generativeai
+oauthlib
+requests-oauthlib
+
+# Legacy Streamlit (backup only - not used in Reflex version)
+# streamlit
+# folium
+# streamlit-folium
