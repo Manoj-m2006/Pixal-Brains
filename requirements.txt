@@ -1,27 +1,33 @@
-# Django web framework
+# Django Framework
 Django>=4.2,<5.0
-djangorestframework
-gunicorn
-whitenoise
+djangorestframework>=3.14.0
 
-# Environment & config
+# Production Server
+gunicorn>=21.2.0
+whitenoise>=6.6.0
+
+# Database
+dj-database-url>=2.1.0
+psycopg2-binary>=2.9.9
+
+# Backend Dependencies
+sentinelhub
 python-dotenv
-
-# Satellite & image processing
-requests
 pillow
 numpy
-opencv-python-headless
-
-# AI / Gemini
+opencv-python
+transformers
+torch
+requests
 google-generativeai
-
-# OAuth (Copernicus)
 oauthlib
 requests-oauthlib
+earthengine-api
 
-# Optional: heavy ML (torch/transformers too large for Vercel ~50MB limit)
-# Install locally or use Railway/Render for full ML support
-# torch
-# transformers
-# sentinelhub
+# Core Reflex Framework (not used in current Django app)
+# reflex>=0.6.0
+
+# Legacy Streamlit (backup only - not used in Django version)
+# streamlit
+# folium
+# streamlit-folium

@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: pixel-brains
+    env: python
+    region: oregon
+    buildCommand: "./build.sh"
+    startCommand: "cd pixel_brains_django && gunicorn pixel_brains_django.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: DJANGO_SETTINGS_MODULE
+        value: pixel_brains_django.settings
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: COPERNICUS_CLIENT_ID
+        sync: false
+      - key: COPERNICUS_CLIENT_SECRET
+        sync: false
+      - key: SH_CLIENT_ID
+        sync: false
+      - key: SH_CLIENT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pixel-brains-db
+          property: connectionString
+
+databases:
+  - name: pixel-brains-db
+    databaseName: pixel_brains
+    user: pixel_brains
+    region: oregon

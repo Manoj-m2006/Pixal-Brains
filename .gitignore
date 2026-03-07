@@ -2,6 +2,16 @@
 assets/external/
 .web
 *.db
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+*.log
+*.pot
+*.pyc
+
 # Virtual Environment
 astrava_env/
 venv/
@@ -52,9 +62,6 @@ Thumbs.db
 
 # Streamlit
 .streamlit/
-
-# Static files collected by Django (generated, not source)
-pixel_brains_django/staticfiles/
 
 # Data (if any large datasets)
 data/raw/*
