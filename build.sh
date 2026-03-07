@@ -8,3 +8,4 @@ pip install -r requirements.txt
 cd pixel_brains_django
 python manage.py collectstatic --no-input
 python manage.py migrate
+cd ..
