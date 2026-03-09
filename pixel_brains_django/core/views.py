@@ -51,3 +51,10 @@ def disasters(request):
         "active_tab": "disasters",
         "title": "Natural Disasters Monitoring",
     })
+
+def air_quality(request):
+    """Tab 6: Air Quality Index monitoring."""
+    return render(request, "air_quality.html", {
+        "active_tab": "air_quality",
+        "title": "Air Quality Index Monitoring",
+    })

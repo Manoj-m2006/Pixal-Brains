@@ -1,0 +1,964 @@
+{% extends 'base.html' %}
+{% block title %}Air Quality Index - Real-time Monitoring{% endblock %}
+
+{% block content %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+
+<!-- Leaflet JavaScript -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.aqi-container {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 60px);
+    background: #000000;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.stars {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0.5;
+}
+
+#aqi-map {
+    width: 100%;
+    height: 100%;
+    z-index: 3;
+    background: #000000;
+}
+
+.leaflet-container {
+    background: #000000 !important;
+}
+
+.leaflet-tile {
+    filter: brightness(0.6) contrast(1.1) saturate(0.8) hue-rotate(180deg);
+}
+
+.aqi-info-panel {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid rgba(0, 217, 255, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    z-index: 1000;
+    min-width: 280px;
+    max-width: 350px;
+    max-height: calc(100vh - 180px);
+    overflow-y: auto;
+    backdrop-filter: blur(12px);
+}
+
+.panel-header {
+    font-size: 10px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(0, 217, 255, 0.45);
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(0, 217, 255, 0.2);
+    padding-bottom: 8px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.stat-card {
+    background: rgba(0, 217, 255, 0.03);
+    border: 1px solid rgba(0, 217, 255, 0.15);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+}
+
+.stat-label {
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 6px;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #00d9ff;
+    font-family: 'Courier New', monospace;
+}
+
+.aqi-legend {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0, 217, 255, 0.2);
+}
+
+.legend-title {
+    font-size: 9px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(0, 217, 255, 0.45);
+    margin-bottom: 10px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 11px;
+}
+
+.legend-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.legend-label {
+    color: rgba(255, 255, 255, 0.7);
+    flex: 1;
+}
+
+.selected-location {
+    background: rgba(0, 217, 255, 0.05);
+    border: 1px solid rgba(0, 217, 255, 0.3);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+}
+
+.location-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #00d9ff;
+    margin-bottom: 8px;
+}
+
+.location-details {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.6;
+}
+
+.aqi-value-display {
+    font-size: 48px;
+    font-weight: 700;
+    text-align: center;
+    margin: 16px 0;
+    font-family: 'Courier New', monospace;
+}
+
+.aqi-category {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+}
+
+.loading-indicator {
+    text-align: center;
+    padding: 30px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 13px;
+}
+
+.refresh-btn {
+    width: 100%;
+    padding: 10px;
+    background: rgba(0, 217, 255, 0.1);
+    border: 1px solid rgba(0, 217, 255, 0.3);
+    border-radius: 6px;
+    color: #00d9ff;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 16px;
+}
+
+.refresh-btn:hover {
+    background: rgba(0, 217, 255, 0.2);
+    border-color: #00d9ff;
+}
+
+.last-updated {
+    text-align: center;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.3);
+    margin-top: 10px;
+    font-family: 'Courier New', monospace;
+}
+
+/* Custom marker styling */
+.aqi-marker {
+    background: none;
+    border: none;
+}
+
+.aqi-marker-content {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.aqi-marker-content:hover {
+    transform: scale(1.3);
+}
+
+/* Scrollbar styling */
+.aqi-info-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.aqi-info-panel::-webkit-scrollbar-track {
+    background: rgba(0, 217, 255, 0.05);
+    border-radius: 3px;
+}
+
+.aqi-info-panel::-webkit-scrollbar-thumb {
+    background: rgba(0, 217, 255, 0.3);
+    border-radius: 3px;
+}
+
+.aqi-info-panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 217, 255, 0.5);
+}
+
+/* Search Bar Styles */
+.search-container {
+    position: fixed;
+    top: 80px;
+    left: 20px;
+    z-index: 1000;
+    width: 350px;
+}
+
+.search-box {
+    position: relative;
+}
+
+.search-input {
+    width: 100%;
+    padding: 12px 45px 12px 15px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid rgba(0, 217, 255, 0.3);
+    border-radius: 8px;
+    color: #00d9ff;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    outline: none;
+    backdrop-filter: blur(12px);
+    transition: all 0.3s ease;
+}
+
+.search-input:focus {
+    border-color: #00d9ff;
+    box-shadow: 0 0 15px rgba(0, 217, 255, 0.3);
+}
+
+.search-input::placeholder {
+    color: rgba(0, 217, 255, 0.4);
+}
+
+.search-icon {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #00d9ff;
+    pointer-events: none;
+}
+
+.search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    margin-top: 8px;
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid rgba(0, 217, 255, 0.3);
+    border-radius: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    backdrop-filter: blur(12px);
+    display: none;
+}
+
+.search-results.show {
+    display: block;
+}
+
+.search-result-item {
+    padding: 12px 15px;
+    color: #00d9ff;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0, 217, 255, 0.1);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    transition: background 0.2s ease;
+}
+
+.search-result-item:hover {
+    background: rgba(0, 217, 255, 0.15);
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-city {
+    font-size: 13px;
+    font-weight: 600;
+    color: #00d9ff;
+}
+
+.search-result-country {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 2px;
+}
+
+.search-result-aqi {
+    float: right;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.search-results::-webkit-scrollbar {
+    width: 6px;
+}
+
+.search-results::-webkit-scrollbar-track {
+    background: rgba(0, 217, 255, 0.05);
+    border-radius: 3px;
+}
+
+.search-results::-webkit-scrollbar-thumb {
+    background: rgba(0, 217, 255, 0.3);
+    border-radius: 3px;
+}
+
+.search-results::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 217, 255, 0.5);
+}
+
+.map-hint {
+    background: rgba(0, 217, 255, 0.1);
+    border: 1px solid rgba(0, 217, 255, 0.3);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 15px 0;
+    color: #00d9ff;
+    font-size: 13px;
+    text-align: center;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.map-hint i {
+    margin-right: 8px;
+    color: #00d9ff;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+/* Custom Popup Styles */
+.leaflet-popup-content-wrapper {
+    background: rgba(0, 0, 0, 0.95) !important;
+    border: 1px solid #00d9ff !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(10px);
+}
+
+.leaflet-popup-tip {
+    background: rgba(0, 0, 0, 0.95) !important;
+    border: 1px solid #00d9ff !important;
+}
+
+.leaflet-popup-close-button {
+    color: #00d9ff !important;
+    font-size: 18px !important;
+}
+
+.leaflet-popup-close-button:hover {
+    color: #00ffff !important;
+}
+</style>
+
+<div class="aqi-container">
+    <!-- Stars background -->
+    <div class="stars" id="stars-bg"></div>
+    
+    <!-- Map -->
+    <div id="aqi-map"></div>
+</div>
+
+<!-- Search Bar -->
+<div class="search-container">
+    <div class="search-box">
+        <input type="text" id="city-search" class="search-input" placeholder="Search any location... (city, village, town)" autocomplete="off">
+        <i class="fas fa-search search-icon"></i>
+        <div id="search-results" class="search-results"></div>
+    </div>
+</div>
+
+<!-- Info Panel -->
+<div class="aqi-info-panel">
+    <div class="panel-header">Air Quality Index Monitor</div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Locations</div>
+            <div class="stat-value" id="total-locations">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Good AQI</div>
+            <div class="stat-value" id="good-count">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Moderate</div>
+            <div class="stat-value" id="moderate-count">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Unhealthy</div>
+            <div class="stat-value" id="unhealthy-count">0</div>
+        </div>
+    </div>
+    
+    <div class="map-hint">
+        <i class="fas fa-hand-pointer"></i>
+        Click anywhere on the map to get real-time AQI data for that specific location
+    </div>
+    
+    <div id="selected-location-info"></div>
+    
+    <div class="aqi-legend">
+        <div class="legend-title">AQI Categories</div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #00e400;"></div>
+            <div class="legend-label">Good (0-50)</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffff00;"></div>
+            <div class="legend-label">Moderate (51-100)</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff7e00;"></div>
+            <div class="legend-label">Unhealthy for Sensitive (101-150)</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff0000;"></div>
+            <div class="legend-label">Unhealthy (151-200)</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #8f3f97;"></div>
+            <div class="legend-label">Very Unhealthy (201-300)</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #7e0023;"></div>
+            <div class="legend-label">Hazardous (300+)</div>
+        </div>
+    </div>
+    
+    <button class="refresh-btn" onclick="refreshAQIData()">
+        <i class="fas fa-sync-alt"></i> Refresh Data
+    </button>
+    
+    <div class="last-updated" id="last-updated"></div>
+</div>
+
+<script>
+let aqiMap;
+let aqiMarkers = [];
+let aqiData = [];
+
+// Initialize map
+function initAQIMap() {
+    aqiMap = L.map('aqi-map', {
+        center: [20, 0],
+        zoom: 2,
+        minZoom: 2,
+        maxZoom: 18,
+        zoomControl: true
+    });
+    
+    // Dark tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        opacity: 1
+    }).addTo(aqiMap);
+    
+    // Add click handler for map
+    aqiMap.on('click', function(e) {
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+        findNearestAQIStation(lat, lon);
+    });
+    
+    // Generate stars
+    generateStars();
+    
+    // Load AQI data
+    loadAQIData();
+}
+
+function generateStars() {
+    const starsContainer = document.getElementById('stars-bg');
+    for (let i = 0; i < 150; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 100 + '%';
+        star.style.width = (Math.random() * 2 + 1) + 'px';
+        star.style.height = star.style.width;
+        star.style.animationDelay = Math.random() * 3 + 's';
+        starsContainer.appendChild(star);
+    }
+}
+
+function loadAQIData() {
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading air quality data...';
+    document.getElementById('selected-location-info').innerHTML = '';
+    document.getElementById('selected-location-info').appendChild(loadingIndicator);
+    
+    fetch('/api/aqi-data/?limit=200')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                aqiData = data.data;
+                displayAQIMarkers(aqiData);
+                updateStatistics(aqiData);
+                updateLastUpdated(data.timestamp);
+                document.getElementById('selected-location-info').innerHTML = '';
+            } else {
+                showError(data.error || 'Failed to load AQI data');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading AQI data:', error);
+            showError('Network error. Please try again.');
+        });
+}
+
+function displayAQIMarkers(data) {
+    // Clear existing markers
+    aqiMarkers.forEach(marker => aqiMap.removeLayer(marker));
+    aqiMarkers = [];
+    
+    // Add new markers
+    data.forEach(location => {
+        const markerHtml = `
+            <div class="aqi-marker-content" style="background-color: ${location.color};">
+                ${Math.round(location.pm25)}
+            </div>
+        `;
+        
+        const marker = L.marker([location.latitude, location.longitude], {
+            icon: L.divIcon({
+                className: 'aqi-marker',
+                html: markerHtml,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+            })
+        }).addTo(aqiMap);
+        
+        // Add popup
+        marker.bindPopup(`
+            <div style="background: #000; color: #00d9ff; padding: 8px; font-family: 'Courier New', monospace; border: 1px solid #00d9ff; border-radius: 5px;">
+                <strong>${location.city}</strong><br>
+                <span style="color: ${location.color}; font-size: 18px; font-weight: bold;">${Math.round(location.pm25)}</span> µg/m³<br>
+                <span style="color: ${location.color};">${location.category}</span>
+            </div>
+        `, {
+            className: 'custom-popup'
+        });
+        
+        marker.on('click', () => showLocationDetails(location));
+        aqiMarkers.push(marker);
+    });
+}
+
+let clickMarker = null;
+
+function findNearestAQIStation(lat, lon) {
+    // Show loading indicator
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'loading-indicator';
+    loadingDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching AQI data for this location...';
+    document.getElementById('selected-location-info').innerHTML = '';
+    document.getElementById('selected-location-info').appendChild(loadingDiv);
+    
+    // Add temporary marker at clicked location
+    if (clickMarker) {
+        aqiMap.removeLayer(clickMarker);
+    }
+    
+    clickMarker = L.circleMarker([lat, lon], {
+        radius: 8,
+        fillColor: '#00d9ff',
+        color: '#00d9ff',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.3
+    }).addTo(aqiMap);
+    
+    // Query API for AQI data at this location (within 25km radius)
+    fetch(`/api/aqi-data/?lat=${lat}&lon=${lon}&limit=5&radius=25000`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.data.length > 0) {
+                // Show the closest station from the API results
+                const nearestStation = data.data[0];
+                const distance = calculateDistance(lat, lon, nearestStation.latitude, nearestStation.longitude);
+                
+                showLocationDetails(nearestStation, lat, lon, distance);
+                
+                // Draw line to station
+                L.polyline([[lat, lon], [nearestStation.latitude, nearestStation.longitude]], {
+                    color: '#00d9ff',
+                    weight: 2,
+                    opacity: 0.5,
+                    dashArray: '5, 10'
+                }).addTo(aqiMap).bindPopup(`Distance: ${distance.toFixed(1)} km`);
+                
+                // Pan to show both points
+                aqiMap.fitBounds([[lat, lon], [nearestStation.latitude, nearestStation.longitude]], {
+                    padding: [50, 50]
+                });
+            } else {
+                document.getElementById('selected-location-info').innerHTML = 
+                    '<div style="color: #ff7e00; padding: 20px; text-align: center;">' +
+                    '<i class="fas fa-exclamation-triangle"></i><br><br>' +
+                    'No AQI monitoring stations found within 25km of this location.<br>' +
+                    `Coordinates: ${lat.toFixed(4)}, ${lon.toFixed(4)}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching location AQI:', error);
+            document.getElementById('selected-location-info').innerHTML = 
+                '<div style="color: #ff0000; padding: 20px; text-align: center;">' +
+                'Error fetching AQI data for this location. Please try again.</div>';
+        });
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    // Haversine formula to calculate distance between two coordinates
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+function showLocationDetails(location, clickLat = null, clickLon = null, distance = null) {
+    let detailsHTML = `
+        <div class="selected-location">`;
+    
+    if (clickLat !== null && distance !== null) {
+        detailsHTML += `
+            <div style="color: #00d9ff; font-size: 14px; margin-bottom: 15px; padding: 10px; background: rgba(0, 217, 255, 0.1); border-radius: 5px;">
+                <i class="fas fa-map-marker-alt"></i> <strong>Your Location:</strong><br>
+                ${clickLat.toFixed(4)}, ${clickLon.toFixed(4)}<br>
+                <small>Showing data from nearest station (${distance.toFixed(1)} km away)</small>
+            </div>`;
+    }
+    
+    detailsHTML += `
+            <div class="location-name">${location.city}, ${location.country}</div>
+            <div class="aqi-value-display" style="color: ${location.color};">
+                ${Math.round(location.pm25)}
+            </div>
+            <div class="aqi-category" style="color: ${location.color};">
+                ${location.category}
+            </div>
+            <div class="location-details">
+                <strong>Station:</strong> ${location.location}<br>
+                <strong>PM2.5:</strong> ${location.pm25} µg/m³<br>
+                <strong>Station Coordinates:</strong> ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}<br>
+                <strong>Last Updated:</strong> ${new Date(location.lastUpdated).toLocaleString()}
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('selected-location-info').innerHTML = detailsHTML;
+    
+    // Pan to location
+    aqiMap.setView([location.latitude, location.longitude], 10, {
+        animate: true,
+        duration: 1
+    });
+}
+
+function updateStatistics(data) {
+    document.getElementById('total-locations').textContent = data.length;
+    
+    const good = data.filter(l => l.category === 'Good').length;
+    const moderate = data.filter(l => l.category === 'Moderate').length;
+    const unhealthy = data.filter(l => 
+        l.category.includes('Unhealthy') || l.category === 'Hazardous'
+    ).length;
+    
+    document.getElementById('good-count').textContent = good;
+    document.getElementById('moderate-count').textContent = moderate;
+    document.getElementById('unhealthy-count').textContent = unhealthy;
+}
+
+function updateLastUpdated(timestamp) {
+    const date = new Date(timestamp);
+    document.getElementById('last-updated').textContent = 
+        `Last updated: ${date.toLocaleString()}`;
+}
+
+function refreshAQIData() {
+    loadAQIData();
+}
+
+// City/Village Search Functionality
+const searchInput = document.getElementById('city-search');
+const searchResults = document.getElementById('search-results');
+let searchTimeout;
+
+if (searchInput) {
+    searchInput.addEventListener('input', function(e) {
+        const query = e.target.value.trim();
+        
+        if (query.length < 3) {
+            searchResults.classList.remove('show');
+            searchResults.innerHTML = '';
+            return;
+        }
+        
+        // Clear previous timeout
+        clearTimeout(searchTimeout);
+        
+        // Show loading
+        searchResults.innerHTML = '<div class="search-result-item" style="color: rgba(0, 217, 255, 0.6);"><i class="fas fa-spinner fa-spin"></i> Searching locations...</div>';
+        searchResults.classList.add('show');
+        
+        // Debounce search
+        searchTimeout = setTimeout(() => {
+            searchLocations(query);
+        }, 500);
+    });
+    
+    // Close search results when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.classList.remove('show');
+        }
+    });
+}
+
+function searchLocations(query) {
+    // Use Nominatim API for comprehensive location search (cities, villages, towns, etc.)
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=10&addressdetails=1`;
+    
+    fetch(nominatimUrl, {
+        headers: {
+            'User-Agent': 'PixelBrains-AQI-App'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data && data.length > 0) {
+            displayLocationResults(data);
+        } else {
+            searchResults.innerHTML = '<div class="search-result-item" style="color: rgba(255, 255, 255, 0.5);">No locations found</div>';
+            searchResults.classList.add('show');
+        }
+    })
+    .catch(error => {
+        console.error('Search error:', error);
+        searchResults.innerHTML = '<div class="search-result-item" style="color: #ff6b6b;">Search error. Please try again.</div>';
+        searchResults.classList.add('show');
+    });
+}
+
+function displayLocationResults(locations) {
+    let html = '';
+    locations.forEach(location => {
+        const address = location.address || {};
+        const displayName = location.display_name.split(',').slice(0, 3).join(',');
+        const locationType = address.village || address.town || address.city || address.county || 'Location';
+        const country = address.country || '';
+        
+        html += `
+            <div class="search-result-item" onclick='selectLocation(${location.lat}, ${location.lon}, "${locationType.replace(/'/g, "\\'")}", "${country.replace(/'/g, "\\'")}")'>
+                <div class="search-result-city">
+                    <i class="fas fa-map-pin" style="font-size: 10px; margin-right: 5px;"></i>
+                    ${locationType}
+                </div>
+                <div class="search-result-country" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</div>
+            </div>
+        `;
+    });
+    searchResults.innerHTML = html;
+    searchResults.classList.add('show');
+}
+
+function selectLocation(lat, lon, locationName, country) {
+    // Close search results
+    searchResults.classList.remove('show');
+    searchInput.value = '';
+    
+    // Show loading in info panel
+    document.getElementById('selected-location-info').innerHTML = 
+        '<div class="loading-indicator"><i class="fas fa-spinner fa-spin"></i> Fetching AQI data for ' + locationName + '...</div>';
+    
+    // Query AQI API for this location
+    fetch(`/api/aqi-data/?lat=${lat}&lon=${lon}&limit=5&radius=50000`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.data.length > 0) {
+                // Show the closest station from the API results
+                const nearestStation = data.data[0];
+                const distance = calculateDistance(lat, lon, nearestStation.latitude, nearestStation.longitude);
+                
+                showLocationDetails(nearestStation, lat, lon, distance);
+                
+                // Add marker at searched location
+                if (clickMarker) {
+                    aqiMap.removeLayer(clickMarker);
+                }
+                
+                clickMarker = L.circleMarker([lat, lon], {
+                    radius: 10,
+                    fillColor: '#00d9ff',
+                    color: '#00d9ff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.3
+                }).addTo(aqiMap).bindPopup(`
+                    <div style="background: #000; color: #00d9ff; padding: 8px; font-family: 'Courier New', monospace;">
+                        <strong>${locationName}</strong><br>
+                        ${country}
+                    </div>
+                `);
+                
+                // Draw line to nearest station
+                L.polyline([[lat, lon], [nearestStation.latitude, nearestStation.longitude]], {
+                    color: '#00d9ff',
+                    weight: 2,
+                    opacity: 0.5,
+                    dashArray: '5, 10'
+                }).addTo(aqiMap);
+                
+                // Zoom to show both points
+                aqiMap.fitBounds([[lat, lon], [nearestStation.latitude, nearestStation.longitude]], {
+                    padding: [100, 100],
+                    maxZoom: 12
+                });
+            } else {
+                // No AQI data found within 50km, just show the location
+                document.getElementById('selected-location-info').innerHTML = 
+                    '<div style="color: #ff7e00; padding: 20px; text-align: center;">' +
+                    '<i class="fas fa-exclamation-triangle"></i><br><br>' +
+                    '<strong>' + locationName + ', ' + country + '</strong><br><br>' +
+                    'No AQI monitoring stations found within 50km of this location.<br>' +
+                    `Coordinates: ${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}</div>`;
+                
+                // Add marker and zoom to location
+                if (clickMarker) {
+                    aqiMap.removeLayer(clickMarker);
+                }
+                
+                clickMarker = L.circleMarker([lat, lon], {
+                    radius: 10,
+                    fillColor: '#ff7e00',
+                    color: '#ff7e00',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.5
+                }).addTo(aqiMap).bindPopup(`
+                    <div style="background: #000; color: #00d9ff; padding: 8px; font-family: 'Courier New', monospace;">
+                        <strong>${locationName}</strong><br>
+                        ${country}<br>
+                        <span style="color: #ff7e00;">No AQI data available</span>
+                    </div>
+                `).openPopup();
+                
+                aqiMap.setView([lat, lon], 10, {
+                    animate: true,
+                    duration: 1.5
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching location AQI:', error);
+            document.getElementById('selected-location-info').innerHTML = 
+                '<div style="color: #ff0000; padding: 20px; text-align: center;">' +
+                'Error fetching AQI data. Please try again.</div>';
+        });
+}
+
+function showError(message) {
+    document.getElementById('selected-location-info').innerHTML = `
+        <div class="loading-indicator" style="color: #ff6b6b;">
+            <i class="fas fa-exclamation-triangle"></i> ${message}
+        </div>
+    `;
+}
+
+// Initialize on load
+window.addEventListener('load', initAQIMap);
+</script>
+{% endblock %}

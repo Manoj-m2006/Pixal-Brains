@@ -10,4 +10,5 @@ urlpatterns = [
     path("analysis/", views.analysis_results, name="analysis_results"),
     path("time-series/", views.time_series_analysis, name="time_series"),
     path("disasters/", views.disasters, name="disasters"),
+    path("air-quality/", views.air_quality, name="air_quality"),
 ]

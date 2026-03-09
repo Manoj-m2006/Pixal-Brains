@@ -17,4 +17,5 @@ urlpatterns = [
     path("disaster-day-by-day/", api_views.disaster_day_by_day, name="disaster_day_by_day"),
     path("disaster-day-by-day-stream/", api_views.disaster_day_by_day_stream, name="disaster_day_by_day_stream"),
     path("disaster-day-by-day-ai/", api_views.disaster_day_by_day_ai, name="disaster_day_by_day_ai"),
+    path("aqi-data/", api_views.get_aqi_data, name="aqi_data"),
 ]
